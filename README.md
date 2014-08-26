@@ -10,15 +10,15 @@ Related Projects
 Before getting used to this, please review this list of projects that are
 somehow related to adb-sync and may fulfill your needs better:
 
-* [http://rsync.samba.org/](rsync) is a file synchronization tool for local
+* [rsync](http://rsync.samba.org/) is a file synchronization tool for local
   (including FUSE) file systems or SSH connections. This can be used even with
   Android devices if rooted or using an app like
-  [https://play.google.com/store/apps/details?id=com.arachnoid.sshelper](SSHelper).
-* [http://collectskin.com/adbfs/](adbfs) is a FUSE file system that uses adb to
+  [SSHelper](https://play.google.com/store/apps/details?id=com.arachnoid.sshelper).
+* [adbfs](http://collectskin.com/adbfs/) is a FUSE file system that uses adb to
   communicate to the device. Requires a rooted device, though.
-* [https://github.com/spion/adbfs-rootless](adbfs-rootless) is a fork of adbfs
+* [adbfs-rootless](https://github.com/spion/adbfs-rootless) is a fork of adbfs
   that requires no root on the device. Does not play very well with rsync.
-* [https://github.com/hanwen/go-mtpfs](go-mtpfs) is a FUSE file system to
+* [go-mtpfs](https://github.com/hanwen/go-mtpfs) is a FUSE file system to
   connect to Android devices via MTP. Due to MTP's restrictions, only a certain
   set of file extensions is supported. To store unsupported files, just add
   .txt! Requires no USB debugging mode.
@@ -32,7 +32,7 @@ Android Side
 First you need to enable USB debugging mode. This allows authorized computers
 (on Android before 4.4.3 all computers) to perform possibly dangerous
 operations on your device. If you do not accept this risk, do not proceed and
-try using [https://github.com/hanwen/go-mtpfs](go-mtpfs) instead!
+try using [go-mtpfs](https://github.com/hanwen/go-mtpfs) instead!
 
 On your Android device:
 
@@ -47,7 +47,7 @@ On your Android device:
 PC Side
 -------
 
-* Install the [http://developer.android.com/sdk/index.html](Android SDK) (the
+* Install the [Android SDK](http://developer.android.com/sdk/index.html) (the
   stand-alone Android SDK "for an existing IDE" is sufficient). Alternatively,
   some Linux distributions come with a package named like "android-tools-adb"
   that contains the required tool.
@@ -96,8 +96,8 @@ Patches to this project are very welcome.
 Before sending a patch or pull request, we ask you to fill out one of the
 Contributor License Agreements:
 
-* [https://developers.google.com/open-source/cla/individual](Google Individual Contributor License Agreement, v1.1)
-* [https://developers.google.com/open-source/cla/corporate](Google Software Grant and Corporate Contributor License Agreement, v1.1)
+* [Google Individual Contributor License Agreement, v1.1](https://developers.google.com/open-source/cla/individual)
+* [Google Software Grant and Corporate Contributor License Agreement, v1.1](https://developers.google.com/open-source/cla/corporate)
 
 Disclaimer
 ==========
