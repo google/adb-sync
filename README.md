@@ -90,6 +90,18 @@ To copy all downloads from your device to your PC, type:
 adb-sync --reverse /sdcard/Download/ ~/Downloads
 ```
 
+TODO
+====
+
+Patches for the following features would be very welcome:
+
+- Supporting wildcards on the SRC side. This has to take place before appending
+  the last path component of SRC to DST; for example, this should work:
+  `adb-sync /sdcard/* ~/mnt`. The best way to implement this is probably to
+  expand the wildcards first, then run multiple AdbFileSyncer instances; this
+  could even allow for somewhat supporting two-way mode with this (however,
+  two-way mode should then be blocked if SRC ends with a slash!).
+
 Contributing
 ============
 
