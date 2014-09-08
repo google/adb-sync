@@ -72,20 +72,20 @@ adb-sync --help
 To synchronize your music files from ~/Music to your device, type:
 
 ```
-adb-sync ~/Music /sdcard/Music
+adb-sync ~/Music/ /sdcard/Music
 ```
 
 To synchronize your music files from ~/Music to your device, deleting files you
 removed from your PC, type:
 
 ```
-adb-sync --delete ~/Music /sdcard/Music
+adb-sync --delete ~/Music/ /sdcard/Music
 ```
 
 To copy all downloads from your device to your PC, type:
 
 ```
-adb-sync --reverse /sdcard/Download ~/Downloads
+adb-sync --reverse /sdcard/Download/ ~/Downloads
 ```
 
 Contributing
