@@ -19,6 +19,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 import argparse
+import glob
 import os
 import re
 import stat
@@ -157,11 +158,7 @@ class AdbFileSystem(object):
     arg = arg.replace(b'"', b'\\"')
     arg = arg.replace(b'$', b'\\$')
     arg = arg.replace(b'`', b'\\`')
-    # Sometimes adb is evil and puts us NOT in double quotes.
-    # So here's a horrible hack to always force double quote mode.
-    # Thanks to autoconf guys for describing this method in portable shell.
-    # $PATH is assumed to always be set, even on Android.
-    arg = b'${PATH+"' + arg + b'"}'
+    arg = b'"' + arg + b'"'
     return arg
 
   def IsWorking(self):
@@ -176,8 +173,8 @@ class AdbFileSystem(object):
     ]
     for test_string in test_strings:
       good = False
-      with self.Stdout(self.adb + [b'shell', b'date',
-                        b'+' + self.QuoteArgument(test_string)]) as stdout:
+      with self.Stdout(self.adb + [b'shell', b'date +%s' %
+                                   self.QuoteArgument(test_string)]) as stdout:
         for line in stdout:
           line = line.rstrip(b'\r\n')
           if line == test_string:
@@ -188,14 +185,14 @@ class AdbFileSystem(object):
 
   def listdir(self, path):  # os's name, so pylint: disable=g-bad-name
     """List the contents of a directory."""
-    with self.Stdout(self.adb + [b'shell', b'ls', b'-a',
+    with self.Stdout(self.adb + [b'shell', b'ls -a %s' %
                       self.QuoteArgument(path)]) as stdout:
       for line in stdout:
         yield line.rstrip(b'\r\n')
 
   def CacheDirectoryLstat(self, path):
     """Cache lstat for a directory."""
-    with self.Stdout(self.adb + [b'shell', b'ls', b'-al',
+    with self.Stdout(self.adb + [b'shell', b'ls -al %s' %
                       self.QuoteArgument(path + b'/')]) as stdout:
       for line in stdout:
         line = line.rstrip(b'\r\n')
@@ -213,7 +210,7 @@ class AdbFileSystem(object):
     """Stat a file."""
     if path in self.stat_cache:
       return self.stat_cache[path]
-    with self.Stdout(self.adb + [b'shell', b'ls', b'-ald',
+    with self.Stdout(self.adb + [b'shell', b'ls -ald %s' %
                       self.QuoteArgument(path)]) as stdout:
       for line in stdout:
         line = line.rstrip(b'\r\n')
@@ -224,17 +221,20 @@ class AdbFileSystem(object):
 
   def unlink(self, path):  # os's name, so pylint: disable=g-bad-name
     """Delete a file."""
-    if subprocess.call(self.adb + [b'shell', b'rm', path]) != 0:
+    if subprocess.call(self.adb + [b'shell', b'rm %s' %
+                                   self.QuoteArgument(path)]) != 0:
       raise OSError('unlink failed')
 
   def rmdir(self, path):  # os's name, so pylint: disable=g-bad-name
     """Delete a directory."""
-    if subprocess.call(self.adb + [b'shell', b'rmdir', path]) != 0:
+    if subprocess.call(self.adb + [b'shell', b'rmdir %s' %
+                                   self.QuoteArgument(path)]) != 0:
       raise OSError('rmdir failed')
 
   def makedirs(self, path):  # os's name, so pylint: disable=g-bad-name
     """Create a directory."""
-    if subprocess.call(self.adb + [b'shell', b'mkdir', b'-p', path]) != 0:
+    if subprocess.call(self.adb + [b'shell', b'mkdir -p %s' %
+                                   self.QuoteArgument(path)]) != 0:
       raise OSError('mkdir failed')
 
   def utime(self, path, times):
@@ -242,13 +242,19 @@ class AdbFileSystem(object):
     """Set the time of a file to a specified unix time."""
     atime, mtime = times
     timestr = time.strftime(b'%Y%m%d.%H%M%S', time.localtime(mtime))
-    if subprocess.call(self.adb + [b'shell', b'touch', b'-mt',
-                                   timestr, path]) != 0:
+    if subprocess.call(self.adb + [b'shell', b'touch -mt %s %s' %
+                                   (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
     timestr = time.strftime(b'%Y%m%d.%H%M%S', time.localtime(atime))
-    if subprocess.call(self.adb + [b'shell', b'touch', b'-at',
-                                   timestr, path]) != 0:
+    if subprocess.call(self.adb + [b'shell', b'touch -at %s %s' %
+                                   (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
+
+  def glob(self, path):
+    with self.Stdout(self.adb + [b'shell', b'for p in %s; do echo "$p"; done' %
+                                 path]) as stdout:
+      for line in stdout:
+        yield line.rstrip(b'\r\n')
 
   def Push(self, src, dst):
     """Push a file from the local file system to the Android device."""
@@ -374,7 +380,7 @@ class FileSyncer(object):
                allow_replace, dry_run):
     self.local = local_path
     self.remote = remote_path
-    self.adb = AdbFileSystem(adb)
+    self.adb = adb
     self.local_to_remote = local_to_remote
     self.remote_to_local = remote_to_local
     self.preserve_times = preserve_times
@@ -493,7 +499,7 @@ class FileSyncer(object):
         elif localminute < remoteminute:
           l2r = False
       if l2r and r2l:
-        print('Unresolvable: $%s' % name.decode('utf-8', errors='replace'))
+        print('Unresolvable: %s' % name.decode('utf-8', errors='replace'))
         continue
       if l2r:
         i = 0  # Local to remote operation.
@@ -573,11 +579,30 @@ class FileSyncer(object):
       print('Total: %d KB/s (%d bytes in %.3fs)' % (rate, self.num_bytes, dt))
 
 
+def ExpandWildcards(globber, path):
+  if path.find('?') == -1 and path.find('*') == -1 and path.find('[') == -1:
+    return [path]
+  return globber.glob(path)
+
+
+def FixPath(src, dst):
+  # rsync-like path munging to make remote specifications shorter.
+  pos = src.rfind(b'/')
+  if pos >= 0:
+    if pos == len(src)-1:
+      # Final slash: copy to the destination "as is".
+      src = src[:-1]
+    else:
+      # No final slash: destination name == source name.
+      dst += src[pos:]
+  return (src, dst)
+
+
 def main(*args):
   parser = argparse.ArgumentParser(
       description='Synchronize a directory between an Android device and the '+
       'local file system')
-  parser.add_argument('source', metavar='SRC', type=str,
+  parser.add_argument('source', metavar='SRC', type=str, nargs='+',
                       help='The directory to read files/directories from. '+
                       'This must be a local path if -R is not specified, '+
                       'and an Android path if -R is specified. If SRC does '+
@@ -635,17 +660,8 @@ def main(*args):
                       'be done.')
   args = parser.parse_args()
 
-  local = args.source.encode('utf-8')
-  remote = args.destination.encode('utf-8')
-  # rsync-like path munging to make remote specifications shorter.
-  pos = local.rfind(b'/')
-  if pos >= 0:
-    if pos == len(local)-1:
-      # Final slash: copy to the destination "as is".
-      local = local[:-1]
-    else:
-      # No final slash: destination name == source name.
-      remote += local[pos:]
+  localpatterns = [x.encode('utf-8') for x in args.source]
+  remotepath = args.destination.encode('utf-8')
   adb = args.adb.encode('utf-8').split(b' ')
   if args.device:
     adb += [b'-d']
@@ -657,6 +673,23 @@ def main(*args):
     adb += [b'-H', args.host.encode('utf-8')]
   if args.port != None:
     adb += [b'-P', args.port.encode('utf-8')]
+  adb = AdbFileSystem(adb)
+
+  # Expand wildcards.
+  localpaths = []
+  remotepaths = []
+  if args.reverse:
+    for pattern in localpatterns:
+      for src in ExpandWildcards(adb, pattern):
+        src, dst = FixPath(src, remotepath)
+        localpaths.append(src)
+        remotepaths.append(dst)
+  else:
+    for src in localpatterns:
+      src, dst = FixPath(src, remotepath)
+      localpaths.append(src)
+      remotepaths.append(dst)
+
   preserve_times = False  # args.times
   delete_missing = args.delete
   allow_replace = args.force
@@ -669,7 +702,7 @@ def main(*args):
     remote_to_local = True
   if args.reverse:
     local_to_remote, remote_to_local = remote_to_local, local_to_remote
-    local, remote = remote, local
+    localpaths, remotepaths = remotepaths, localpaths
   if allow_replace and not allow_overwrite:
     print('--no-clobber and --force are mutually exclusive.')
     parser.print_help()
@@ -679,19 +712,31 @@ def main(*args):
     parser.print_help()
     return
 
-  syncer = FileSyncer(adb, local, remote,
-                      local_to_remote, remote_to_local, preserve_times,
-                      delete_missing, allow_overwrite, allow_replace, dry_run)
-  if not syncer.IsWorking():
-    print('Device not connected or not working.')
-    return
-  try:
-    syncer.ScanAndDiff()
-    syncer.PerformDeletions()
-    syncer.PerformOverwrites()
-    syncer.PerformCopies()
-  finally:
-    syncer.TimeReport()
+  # Two-way sync is only allowed with disjoint remote and local path sets.
+  if (remote_to_local and local_to_remote) or delete_missing:
+    if ((remote_to_local and len(localpaths) != len(set(localpaths))) or
+        (local_to_remote and len(remotepaths) != len(set(remotepaths)))):
+      print('--two-way and --delete are only supported for disjoint sets of '+
+            'source and destination paths (in other words, all SRC must '+
+            'differ in basename).')
+      parser.print_help()
+      return
+
+  for i in range(len(localpaths)):
+    print('Sync: local %s, remote %s' % (localpaths[i], remotepaths[i]))
+    syncer = FileSyncer(adb, localpaths[i], remotepaths[i],
+                        local_to_remote, remote_to_local, preserve_times,
+                        delete_missing, allow_overwrite, allow_replace, dry_run)
+    if not syncer.IsWorking():
+      print('Device not connected or not working.')
+      return
+    try:
+      syncer.ScanAndDiff()
+      syncer.PerformDeletions()
+      syncer.PerformOverwrites()
+      syncer.PerformCopies()
+    finally:
+      syncer.TimeReport()
 
 if __name__ == '__main__':
   main(*sys.argv)
