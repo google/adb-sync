@@ -32,7 +32,7 @@ class AdbFileSystem(object):
 
   def __init__(self, adb):
     self.stat_cache = {}
-    self.adb = adb.split(b' ')
+    self.adb = adb
 
   # Regarding parsing stat results, we only care for the following fields:
   # - st_size
@@ -587,6 +587,28 @@ def main(*args):
                       'and a local path if -R is specified.')
   parser.add_argument('-e', '--adb', metavar='COMMAND', default='adb', type=str,
                       help='Use the given adb binary and arguments.')
+  parser.add_argument('--device', action='store_true',
+                      help='Directs command to the only connected USB device; '+
+                      'returns an error if more than one USB device is '+
+                      'present. '+
+                      'Corresponds to the "-d" option of adb.')
+  parser.add_argument('--emulator', action='store_true',
+                      help='Directs command to the only running emulator; '+
+                      'returns an error if more than one emulator is running. '+
+                      'Corresponds to the "-e" option of adb.')
+  parser.add_argument('-s', '--serial', metavar='DEVICE', type=str,
+                      help='Directs command to the device or emulator with '+
+                      'the given serial number or qualifier. Overrides '+
+                      'ANDROID_SERIAL environment variable. Use "adb devices" '+
+                      'to list all connected devices with their respective '+
+                      'serial number. '+
+                      'Corresponds to the "-s" option of adb.')
+  parser.add_argument('-H', '--host', metavar='HOST', type=str,
+                      help='Name of adb server host (default: localhost). '+
+                      'Corresponds to the "-H" option of adb.')
+  parser.add_argument('-P', '--port', metavar='PORT', type=str,
+                      help='Port of adb server (default: 5037). '+
+                      'Corresponds to the "-P" option of adb.')
   parser.add_argument('-R', '--reverse', action='store_true',
                       help='Reverse sync (pull, not push).')
   parser.add_argument('-2', '--two-way', action='store_true',
@@ -613,7 +635,17 @@ def main(*args):
 
   local = args.source
   remote = args.destination
-  adb = args.adb
+  adb = args.adb.encode('utf-8').split(b' ')
+  if args.device:
+    adb += [b'-d']
+  if args.emulator:
+    adb += [b'-e']
+  if args.serial != None:
+    adb += [b'-s', args.serial.encode('utf-8')]
+  if args.host != None:
+    adb += [b'-H', args.host.encode('utf-8')]
+  if args.port != None:
+    adb += [b'-P', args.port.encode('utf-8')]
   preserve_times = False  # args.times
   delete_missing = args.delete
   allow_replace = args.force
@@ -636,7 +668,7 @@ def main(*args):
     parser.print_help()
     return
 
-  syncer = FileSyncer(adb.encode('utf-8'),
+  syncer = FileSyncer(adb,
                       local.encode('utf-8'), remote.encode('utf-8'),
                       local_to_remote, remote_to_local, preserve_times,
                       delete_missing, allow_overwrite, allow_replace, dry_run)
