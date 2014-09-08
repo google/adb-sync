@@ -580,7 +580,9 @@ def main(*args):
   parser.add_argument('source', metavar='SRC', type=str,
                       help='The directory to read files/directories from. '+
                       'This must be a local path if -R is not specified, '+
-                      'and an Android path if -R is specified.')
+                      'and an Android path if -R is specified. If SRC does '+
+                      'not end with a final slash, its last path component '+
+                      'is appended to DST (like rsync does).')
   parser.add_argument('destination', metavar='DST', type=str,
                       help='The directory to write files/directories to. '+
                       'This must be an Android path if -R is not specified, '+
@@ -633,8 +635,17 @@ def main(*args):
                       'be done.')
   args = parser.parse_args()
 
-  local = args.source
-  remote = args.destination
+  local = args.source.encode('utf-8')
+  remote = args.destination.encode('utf-8')
+  # rsync-like path munging to make remote specifications shorter.
+  pos = local.rfind(b'/')
+  if pos >= 0:
+    if pos == len(local)-1:
+      # Final slash: copy to the destination "as is".
+      local = local[:-1]
+    else:
+      # No final slash: destination name == source name.
+      remote += local[pos:]
   adb = args.adb.encode('utf-8').split(b' ')
   if args.device:
     adb += [b'-d']
@@ -668,8 +679,7 @@ def main(*args):
     parser.print_help()
     return
 
-  syncer = FileSyncer(adb,
-                      local.encode('utf-8'), remote.encode('utf-8'),
+  syncer = FileSyncer(adb, local, remote,
                       local_to_remote, remote_to_local, preserve_times,
                       delete_missing, allow_overwrite, allow_replace, dry_run)
   if not syncer.IsWorking():
