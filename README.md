@@ -69,16 +69,18 @@ To get a full help, type:
 adb-sync --help
 ```
 
-To synchronize your music files from ~/Music to your device, type:
+To synchronize your music files from ~/Music to your device, type one of:
 
 ```
+adb-sync ~/Music /sdcard
 adb-sync ~/Music/ /sdcard/Music
 ```
 
 To synchronize your music files from ~/Music to your device, deleting files you
-removed from your PC, type:
+removed from your PC, type one of:
 
 ```
+adb-sync --delete ~/Music /sdcard
 adb-sync --delete ~/Music/ /sdcard/Music
 ```
 
