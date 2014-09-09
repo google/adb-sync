@@ -589,12 +589,14 @@ def FixPath(src, dst):
   # rsync-like path munging to make remote specifications shorter.
   pos = src.rfind(b'/')
   if pos >= 0:
-    if pos == len(src)-1:
+    if src.endswith(b'/'):
       # Final slash: copy to the destination "as is".
       src = src[:-1]
     else:
       # No final slash: destination name == source name.
       dst += src[pos:]
+  else:
+    dst += b'/' + src
   return (src, dst)
 
 
