@@ -587,6 +587,7 @@ def ExpandWildcards(globber, path):
 
 def FixPath(src, dst):
   # rsync-like path munging to make remote specifications shorter.
+  append = b''
   pos = src.rfind(b'/')
   if pos >= 0:
     if src.endswith(b'/'):
@@ -594,9 +595,14 @@ def FixPath(src, dst):
       src = src[:-1]
     else:
       # No final slash: destination name == source name.
-      dst += src[pos:]
+      append = src[pos:]
   else:
-    dst += b'/' + src
+    # No slash at all - use same name at destination.
+    append = b'/' + src
+  # Append the destination file name if any.
+  # BUT: do not append "." or ".." components!
+  if append != b'/.' and append != b'/..':
+    dst += append
   return (src, dst)
 
 
