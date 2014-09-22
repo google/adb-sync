@@ -90,6 +90,28 @@ To copy all downloads from your device to your PC, type:
 adb-sync --reverse /sdcard/Download/ ~/Downloads
 ```
 
+ADB Channel
+===========
+
+This package also contains a separate tool called adb-channel, which is a
+convenience wrapper to connect a networking socket on the Android device to
+file descriptors on the PC side.
+
+It is best used as a `ProxyCommand` for SSH (intall
+[SSHelper](https://play.google.com/store/apps/details?id=com.arachnoid.sshelper)
+first) using a configuration like:
+
+```
+Host sshhelper
+Port 2222
+ProxyCommand adb-channel tcp:%d
+```
+
+After adding this to `~/.ssh/config`, run `ssh-copy-id sshhelper`.
+
+Congratulations! You can now use `rsync`, `sshfs` etc. to the host name
+`sshhelper`.
+
 Contributing
 ============
 
