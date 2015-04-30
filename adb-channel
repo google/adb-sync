@@ -4,11 +4,18 @@ set -e
 
 t=`mktemp -d -t adb-channel.XXXXXX`
 
+remote=${1}
+activity=${2}
+delat=${3}
+
 atexit() {
+  [ -z "${activity}" ] || adb shell am force-stop ${activity%%/*}
   adb forward --remove localfilesystem:"${t}/sock"
   rm -rf "${t}"
 }
 trap atexit EXIT
 
+[ -z "${activity}" ] || adb shell am start -W ${activity}
+[ -z "${delay}" ] || sleep "${delay}"
 adb forward localfilesystem:"${t}/sock" "${1}"
 socat stdio unix:"${t}/sock"

@@ -95,7 +95,8 @@ ADB Channel
 
 This package also contains a separate tool called adb-channel, which is a
 convenience wrapper to connect a networking socket on the Android device to
-file descriptors on the PC side.
+file descriptors on the PC side. It can even launch and shut down the given
+application automatically!
 
 It is best used as a `ProxyCommand` for SSH (intall
 [SSHelper](https://play.google.com/store/apps/details?id=com.arachnoid.sshelper)
@@ -104,7 +105,7 @@ first) using a configuration like:
 ```
 Host sshhelper
 Port 2222
-ProxyCommand adb-channel tcp:%d
+ProxyCommand adb-channel tcp:%d com.arachnoid.sshelper/.SSHelperActivity 1
 ```
 
 After adding this to `~/.ssh/config`, run `ssh-copy-id sshhelper`.
