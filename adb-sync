@@ -20,6 +20,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 import argparse
 import glob
+import fnmatch
 import os
 import re
 import stat
@@ -305,6 +306,20 @@ def BuildFileList(fs, path, prefix=b''):
     print('Note: unsupported file: %s' % path.decode('utf-8', errors='replace'))
 
 
+def FilterFileList(file_iter, excludes):
+    if not excludes:
+        excludes = []
+    for f in file_iter:
+        excluded = False
+        for pat in excludes:
+            if fnmatch.fnmatch(f[0], pat):
+                excluded = True
+                break
+        if excluded:
+            continue
+        yield f
+
+
 def DiffLists(a, b):
   """Compares two lists.
 
@@ -377,7 +392,7 @@ class FileSyncer(object):
 
   def __init__(self, adb, local_path, remote_path, local_to_remote,
                remote_to_local, preserve_times, delete_missing, allow_overwrite,
-               allow_replace, dry_run):
+               allow_replace, dry_run, exclude):
     self.local = local_path
     self.remote = remote_path
     self.adb = adb
@@ -388,6 +403,7 @@ class FileSyncer(object):
     self.allow_overwrite = allow_overwrite
     self.allow_replace = allow_replace
     self.dry_run = dry_run
+    self.exclude = exclude
     self.local_only = None
     self.both = None
     self.remote_only = None
@@ -403,8 +419,10 @@ class FileSyncer(object):
     print('Scanning and diffing...')
     locallist = BuildFileList(os, self.local)
     remotelist = BuildFileList(self.adb, self.remote)
-    self.local_only, self.both, self.remote_only = DiffLists(locallist,
-                                                             remotelist)
+    locallist_fil = FilterFileList(locallist, self.exclude)
+    remotelist_fil = FilterFileList(remotelist, self.exclude)
+    self.local_only, self.both, self.remote_only = DiffLists(locallist_fil,
+                                                             remotelist_fil)
     if not self.local_only and not self.both and not self.remote_only:
       print('No files seen. User error?')
     self.src_to_dst = (self.local_to_remote, self.remote_to_local)
@@ -666,6 +684,8 @@ def main(*args):
   parser.add_argument('--dry-run',action='store_true',
                       help='Do not do anything - just show what would '+
                       'be done.')
+  parser.add_argument('-x', '--exclude', action='append', type=str,
+                      metavar='PATTERN', help='Exclude files matching PATTERN')
   args = parser.parse_args()
 
   localpatterns = [x.encode('utf-8') for x in args.source]
@@ -703,6 +723,7 @@ def main(*args):
   allow_replace = args.force
   allow_overwrite = not args.no_clobber
   dry_run = args.dry_run
+  exclude = args.exclude
   local_to_remote = True
   remote_to_local = False
   if args.two_way:
@@ -734,7 +755,8 @@ def main(*args):
     print('Sync: local %s, remote %s' % (localpaths[i], remotepaths[i]))
     syncer = FileSyncer(adb, localpaths[i], remotepaths[i],
                         local_to_remote, remote_to_local, preserve_times,
-                        delete_missing, allow_overwrite, allow_replace, dry_run)
+                        delete_missing, allow_overwrite, allow_replace, dry_run,
+                        exclude)
     if not syncer.IsWorking():
       print('Device not connected or not working.')
       return
