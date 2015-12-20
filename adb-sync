@@ -16,16 +16,42 @@
 
 """Sync files from/to an Android device."""
 
-from __future__ import print_function
 from __future__ import unicode_literals
 import argparse
 import glob
+import locale
 import os
 import re
 import stat
 import subprocess
 import sys
 import time
+
+
+def _sprintf(s, *args):
+    # To be able to use string formatting, we first have to covert to
+    # unicode strings; however, we must do so in a way that preserves all
+    # bytes, and convert back at the end. An encoding that maps all byte
+    # values to different Unicode codepoints is cp437.
+    return (s.decode('cp437') % tuple([
+        (x.decode('cp437') if type(x) == bytes else x) for x in args
+    ])).encode('cp437')
+
+
+def _print(s, *args):
+    """Writes a binary string to stdout.
+
+    Args:
+      s: The binary format string to write.
+      args: The args for the format string.
+    """
+    if hasattr(sys.stdout, 'buffer'):
+        # Python 3.
+        sys.stdout.buffer.write(_sprintf(s, *args) + b'\n')
+        sys.stdout.buffer.flush()
+    else:
+        # Python 2.
+        sys.stdout.write(_sprintf(s, *args) + b'\n')
 
 
 class AdbFileSystem(object):
@@ -41,7 +67,7 @@ class AdbFileSystem(object):
   # - st_mode (but only about S_ISDIR and S_ISREG properties)
   # Therefore, we only capture parts of 'ls -l' output that we actually use.
   # The other fields will be filled with dummy values.
-  LS_TO_STAT_RE = re.compile(r'''^
+  LS_TO_STAT_RE = re.compile(br'''^
                              (?:
                                (?P<S_IFREG> -) |
                                (?P<S_IFBLK> b) |
@@ -87,7 +113,7 @@ class AdbFileSystem(object):
 
     match = self.LS_TO_STAT_RE.match(line)
     if match is None:
-      print('Warning: could not parse %r.' % line)
+      _print(b'Warning: could not parse %r.', line)
       raise OSError('Unparseable ls -al result.')
     groups = match.groupdict()
 
@@ -173,8 +199,8 @@ class AdbFileSystem(object):
     ]
     for test_string in test_strings:
       good = False
-      with self.Stdout(self.adb + [b'shell', b'date +%s' %
-                                   self.QuoteArgument(test_string)]) as stdout:
+      with self.Stdout(self.adb + [b'shell', _sprintf(b'date +%s',
+                                   self.QuoteArgument(test_string))]) as stdout:
         for line in stdout:
           line = line.rstrip(b'\r\n')
           if line == test_string:
@@ -185,15 +211,15 @@ class AdbFileSystem(object):
 
   def listdir(self, path):  # os's name, so pylint: disable=g-bad-name
     """List the contents of a directory."""
-    with self.Stdout(self.adb + [b'shell', b'ls -a %s' %
-                      self.QuoteArgument(path)]) as stdout:
+    with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -a %s',
+                      self.QuoteArgument(path))]) as stdout:
       for line in stdout:
         yield line.rstrip(b'\r\n')
 
   def CacheDirectoryLstat(self, path):
     """Cache lstat for a directory."""
-    with self.Stdout(self.adb + [b'shell', b'ls -al %s' %
-                      self.QuoteArgument(path + b'/')]) as stdout:
+    with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -al %s',
+                      self.QuoteArgument(path + b'/'))]) as stdout:
       for line in stdout:
         line = line.rstrip(b'\r\n')
         try:
@@ -201,8 +227,7 @@ class AdbFileSystem(object):
         except OSError:
           continue
         if filename is None:
-          print('Warning: could not cache %s' %
-                line.decode('utf-8', errors='replace'))
+          _print(b'Warning: could not cache %s', line)
         else:
           self.stat_cache[path + b'/' + filename] = statdata
 
@@ -210,8 +235,8 @@ class AdbFileSystem(object):
     """Stat a file."""
     if path in self.stat_cache:
       return self.stat_cache[path]
-    with self.Stdout(self.adb + [b'shell', b'ls -ald %s' %
-                      self.QuoteArgument(path)]) as stdout:
+    with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -ald %s',
+                      self.QuoteArgument(path))]) as stdout:
       for line in stdout:
         line = line.rstrip(b'\r\n')
         statdata, filename = self.LsToStat(line)
@@ -221,20 +246,20 @@ class AdbFileSystem(object):
 
   def unlink(self, path):  # os's name, so pylint: disable=g-bad-name
     """Delete a file."""
-    if subprocess.call(self.adb + [b'shell', b'rm %s' %
-                                   self.QuoteArgument(path)]) != 0:
+    if subprocess.call(self.adb + [b'shell', _sprintf(b'rm %s',
+                                   self.QuoteArgument(path))]) != 0:
       raise OSError('unlink failed')
 
   def rmdir(self, path):  # os's name, so pylint: disable=g-bad-name
     """Delete a directory."""
-    if subprocess.call(self.adb + [b'shell', b'rmdir %s' %
-                                   self.QuoteArgument(path)]) != 0:
+    if subprocess.call(self.adb + [b'shell', _sprintf(b'rmdir %s',
+                                   self.QuoteArgument(path))]) != 0:
       raise OSError('rmdir failed')
 
   def makedirs(self, path):  # os's name, so pylint: disable=g-bad-name
     """Create a directory."""
-    if subprocess.call(self.adb + [b'shell', b'mkdir -p %s' %
-                                   self.QuoteArgument(path)]) != 0:
+    if subprocess.call(self.adb + [b'shell', _sprintf(b'mkdir -p %s',
+                                   self.QuoteArgument(path))]) != 0:
       raise OSError('mkdir failed')
 
   def utime(self, path, times):
@@ -242,17 +267,18 @@ class AdbFileSystem(object):
     """Set the time of a file to a specified unix time."""
     atime, mtime = times
     timestr = time.strftime(b'%Y%m%d.%H%M%S', time.localtime(mtime))
-    if subprocess.call(self.adb + [b'shell', b'touch -mt %s %s' %
-                                   (timestr, self.QuoteArgument(path))]) != 0:
+    if subprocess.call(self.adb + [b'shell', _sprintf(b'touch -mt %s %s',
+                                   timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
     timestr = time.strftime(b'%Y%m%d.%H%M%S', time.localtime(atime))
-    if subprocess.call(self.adb + [b'shell', b'touch -at %s %s' %
-                                   (timestr, self.QuoteArgument(path))]) != 0:
+    if subprocess.call(self.adb + [b'shell',_sprintf( b'touch -at %s %s',
+                                   timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
 
   def glob(self, path):
-    with self.Stdout(self.adb + [b'shell', b'for p in %s; do echo "$p"; done' %
-                                 path]) as stdout:
+    with self.Stdout(self.adb + [b'shell',
+                                 _sprintf(b'for p in %s; do echo "$p"; done',
+                                 path)]) as stdout:
       for line in stdout:
         yield line.rstrip(b'\r\n')
 
@@ -293,8 +319,7 @@ def BuildFileList(fs, path, prefix=b''):
       if hasattr(fs, 'CacheDirectoryLstat'):
         fs.CacheDirectoryLstat(path)
     except OSError:
-      print('Warning: could not cache lstat for %s' %
-            path.decode('utf-8', errors='replace'))
+      _print(b'Warning: could not cache lstat for %s', path)
     files.sort()
     for n in files:
       for t in BuildFileList(fs, path + b'/' + n, prefix + b'/' + n):
@@ -302,7 +327,7 @@ def BuildFileList(fs, path, prefix=b''):
   elif stat.S_ISREG(statresult.st_mode):
     yield prefix, statresult
   else:
-    print('Note: unsupported file: %s' % path.decode('utf-8', errors='replace'))
+    _print(b'Note: unsupported file: %s', path)
 
 
 def DiffLists(a, b):
@@ -400,13 +425,13 @@ class FileSyncer(object):
 
   def ScanAndDiff(self):
     """Scans the local and remote locations and identifies differences."""
-    print('Scanning and diffing...')
+    _print(b'Scanning and diffing...')
     locallist = BuildFileList(os, self.local)
     remotelist = BuildFileList(self.adb, self.remote)
     self.local_only, self.both, self.remote_only = DiffLists(locallist,
                                                              remotelist)
     if not self.local_only and not self.both and not self.remote_only:
-      print('No files seen. User error?')
+      _print(b'No files seen. User error?')
     self.src_to_dst = (self.local_to_remote, self.remote_to_local)
     self.dst_to_src = (self.remote_to_local, self.local_to_remote)
     self.src_only = (self.local_only, self.remote_only)
@@ -414,7 +439,7 @@ class FileSyncer(object):
     self.src = (self.local, self.remote)
     self.dst = (self.remote, self.local)
     self.dst_fs = (self.adb, os)
-    self.push = ('Push', 'Pull')
+    self.push = (b'Push', b'Pull')
     self.copy = (self.adb.Push, self.adb.Pull)
 
   def InterruptProtection(self, fs, name):
@@ -443,9 +468,8 @@ class FileSyncer(object):
 
       def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is not None:
-          print('Interrupted-%s-Delete: %s' %
-                ('Pull' if fs == os else 'Push',
-                 name.decode('utf-8', errors='replace')))
+          _print(b'Interrupted-%s-Delete: %s' %
+                 (b'Pull' if fs == os else b'Push', name))
           if not dry_run:
             fs.unlink(name)
         return False
@@ -459,12 +483,12 @@ class FileSyncer(object):
     for i in [0, 1]:
       if self.src_to_dst[i] and not self.dst_to_src[i]:
         if not self.src_only[i] and not self.both:
-          print('Cowardly refusing to delete everything.')
+          _print(b'Cowardly refusing to delete everything.')
         else:
           for name, s in reversed(self.dst_only[i]):
             dst_name = self.dst[i] + name
-            print('%s-Delete: %s' %
-                  (self.push[i], dst_name.decode('utf-8', errors='replace')))
+            _print(b'%s-Delete: %s' %
+                   (self.push[i], dst_name))
             if stat.S_ISDIR(s.st_mode):
               if not self.dry_run:
                 self.dst_fs[i].rmdir(dst_name)
@@ -499,7 +523,7 @@ class FileSyncer(object):
         elif localminute < remoteminute:
           l2r = False
       if l2r and r2l:
-        print('Unresolvable: %s' % name.decode('utf-8', errors='replace'))
+        _print(b'Unresolvable: %s', name)
         continue
       if l2r:
         i = 0  # Local to remote operation.
@@ -510,20 +534,21 @@ class FileSyncer(object):
         src_stat = remotestat
         dst_stat = localstat
       dst_name = self.dst[i] + name
-      print('%s-Delete-Conflicting: %s' %
-            (self.push[i], dst_name.decode('utf-8', errors='replace')))
+      _print(b'%s-Delete-Conflicting: %s', self.push[i], dst_name)
       if stat.S_ISDIR(localstat.st_mode) or stat.S_ISDIR(remotestat.st_mode):
         if not self.allow_replace:
-          print('Would have to replace to do this. Use --force to allow this.')
+          _print(b'Would have to replace to do this. '
+                 b'Use --force to allow this.')
           continue
       if not self.allow_overwrite:
-        print('Would have to overwrite to do this, which --no-clobber forbids.')
+        _print(b'Would have to overwrite to do this, '
+               b'which --no-clobber forbids.')
         continue
       if stat.S_ISDIR(dst_stat.st_mode):
         kill_files = [x for x in self.dst_only[i]
-                      if x[0][:len(name) + 1] == name + '/']
+                      if x[0][:len(name) + 1] == name + b'/']
         self.dst_only[i][:] = [x for x in self.dst_only[i]
-                               if x[0][:len(name) + 1] != name + '/']
+                               if x[0][:len(name) + 1] != name + b'/']
         for l, s in reversed(kill_files):
           if stat.S_ISDIR(s.st_mode):
             if not self.dry_run:
@@ -550,8 +575,7 @@ class FileSyncer(object):
         for name, s in self.src_only[i]:
           src_name = self.src[i] + name
           dst_name = self.dst[i] + name
-          print('%s: %s' %
-                (self.push[i], dst_name.decode('utf-8', errors='replace')))
+          _print(b'%s: %s', self.push[i], dst_name)
           if stat.S_ISDIR(s.st_mode):
             if not self.dry_run:
               self.dst_fs[i].makedirs(dst_name)
@@ -562,25 +586,25 @@ class FileSyncer(object):
               self.num_bytes += s.st_size
           if not self.dry_run:
             if self.preserve_times:
-              print('%s-Times: accessed %s, modified %s' %
-                    (self.push[i],
-                     time.asctime(time.localtime(s.st_atime)),
-                     time.asctime(time.localtime(s.st_mtime))))
+              _print(b'%s-Times: accessed %s, modified %s' %
+                     (self.push[i],
+                      time.asctime(time.localtime(s.st_atime)).encode('utf-8'),
+                      time.asctime(time.localtime(s.st_mtime)).encode('utf-8')))
               self.dst_fs[i].utime(dst_name, (s.st_atime, s.st_mtime))
 
   def TimeReport(self):
     """Report time and amount of data transferred."""
     if self.dry_run:
-      print('Total: %d bytes' % self.num_bytes)
+      _print(b'Total: %d bytes', self.num_bytes)
     else:
       end_time = time.time()
       dt = end_time - self.start_time
       rate = self.num_bytes / 1024.0 / dt
-      print('Total: %d KB/s (%d bytes in %.3fs)' % (rate, self.num_bytes, dt))
+      _print(b'Total: %d KB/s (%d bytes in %.3fs)', rate, self.num_bytes, dt)
 
 
 def ExpandWildcards(globber, path):
-  if path.find('?') == -1 and path.find('*') == -1 and path.find('[') == -1:
+  if path.find(b'?') == -1 and path.find(b'*') == -1 and path.find(b'[') == -1:
     return [path]
   return globber.glob(path)
 
@@ -667,20 +691,21 @@ def main(*args):
                       help='Do not do anything - just show what would '+
                       'be done.')
   args = parser.parse_args()
+  args_encoding = locale.getdefaultlocale()[1]
 
-  localpatterns = [x.encode('utf-8') for x in args.source]
-  remotepath = args.destination.encode('utf-8')
-  adb = args.adb.encode('utf-8').split(b' ')
+  localpatterns = [x.encode(args_encoding) for x in args.source]
+  remotepath = args.destination.encode(args_encoding)
+  adb = args.adb.encode(args_encoding).split(b' ')
   if args.device:
     adb += [b'-d']
   if args.emulator:
     adb += [b'-e']
   if args.serial != None:
-    adb += [b'-s', args.serial.encode('utf-8')]
+    adb += [b'-s', args.serial.encode(args_encoding)]
   if args.host != None:
-    adb += [b'-H', args.host.encode('utf-8')]
+    adb += [b'-H', args.host.encode(args_encoding)]
   if args.port != None:
-    adb += [b'-P', args.port.encode('utf-8')]
+    adb += [b'-P', args.port.encode(args_encoding)]
   adb = AdbFileSystem(adb)
 
   # Expand wildcards.
@@ -712,11 +737,11 @@ def main(*args):
     local_to_remote, remote_to_local = remote_to_local, local_to_remote
     localpaths, remotepaths = remotepaths, localpaths
   if allow_replace and not allow_overwrite:
-    print('--no-clobber and --force are mutually exclusive.')
+    _print(b'--no-clobber and --force are mutually exclusive.')
     parser.print_help()
     return
   if delete_missing and local_to_remote and remote_to_local:
-    print('--delete and --two-way are mutually exclusive.')
+    _print(b'--delete and --two-way are mutually exclusive.')
     parser.print_help()
     return
 
@@ -724,19 +749,19 @@ def main(*args):
   if (remote_to_local and local_to_remote) or delete_missing:
     if ((remote_to_local and len(localpaths) != len(set(localpaths))) or
         (local_to_remote and len(remotepaths) != len(set(remotepaths)))):
-      print('--two-way and --delete are only supported for disjoint sets of '+
-            'source and destination paths (in other words, all SRC must '+
-            'differ in basename).')
+      _print(b'--two-way and --delete are only supported for disjoint sets of '
+             b'source and destination paths (in other words, all SRC must '
+             b'differ in basename).')
       parser.print_help()
       return
 
   for i in range(len(localpaths)):
-    print('Sync: local %s, remote %s' % (localpaths[i], remotepaths[i]))
+    _print(b'Sync: local %s, remote %s', localpaths[i], remotepaths[i])
     syncer = FileSyncer(adb, localpaths[i], remotepaths[i],
                         local_to_remote, remote_to_local, preserve_times,
                         delete_missing, allow_overwrite, allow_replace, dry_run)
     if not syncer.IsWorking():
-      print('Device not connected or not working.')
+      _print(b'Device not connected or not working.')
       return
     try:
       syncer.ScanAndDiff()
