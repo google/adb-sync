@@ -468,8 +468,8 @@ class FileSyncer(object):
 
       def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is not None:
-          _print(b'Interrupted-%s-Delete: %s' %
-                 (b'Pull' if fs == os else b'Push', name))
+          _print(b'Interrupted-%s-Delete: %s',
+                 b'Pull' if fs == os else b'Push', name)
           if not dry_run:
             fs.unlink(name)
         return False
@@ -487,8 +487,7 @@ class FileSyncer(object):
         else:
           for name, s in reversed(self.dst_only[i]):
             dst_name = self.dst[i] + name
-            _print(b'%s-Delete: %s' %
-                   (self.push[i], dst_name))
+            _print(b'%s-Delete: %s', self.push[i], dst_name)
             if stat.S_ISDIR(s.st_mode):
               if not self.dry_run:
                 self.dst_fs[i].rmdir(dst_name)
@@ -586,10 +585,10 @@ class FileSyncer(object):
               self.num_bytes += s.st_size
           if not self.dry_run:
             if self.preserve_times:
-              _print(b'%s-Times: accessed %s, modified %s' %
-                     (self.push[i],
-                      time.asctime(time.localtime(s.st_atime)).encode('utf-8'),
-                      time.asctime(time.localtime(s.st_mtime)).encode('utf-8')))
+              _print(b'%s-Times: accessed %s, modified %s',
+                     self.push[i],
+                     time.asctime(time.localtime(s.st_atime)).encode('utf-8'),
+                     time.asctime(time.localtime(s.st_mtime)).encode('utf-8'))
               self.dst_fs[i].utime(dst_name, (s.st_atime, s.st_mtime))
 
   def TimeReport(self):
