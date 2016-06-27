@@ -79,13 +79,18 @@ class AdbFileSystem(object):
                              [-r][-w][-xsS]
                              [-r][-w][-xsS]
                              [-r][-w][-xtT]  # Mode string.
-                             [ ]
+                             [ ]+
+                             (?:
+                                [0-9]+  # number of hard links
+                                [ ]+
+                                )?
                              [^ ]+  # User name/ID.
                              [ ]+
                              [^ ]+  # Group name/ID.
                              [ ]+
                              (?(S_IFBLK) [^ ]+[ ]+[^ ]+[ ]+)    # Device numbers.
                              (?(S_IFCHR) [^ ]+[ ]+[^ ]+[ ]+)    # Device numbers.
+                             (?(S_IFDIR) [0-9]+ [ ]+)?          # directory Size.
                              (?(S_IFREG)
                                (?P<st_size> [0-9]+)             # Size.
                                [ ]+)
@@ -221,6 +226,8 @@ class AdbFileSystem(object):
     with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -al %s',
                       self.QuoteArgument(path + b'/'))]) as stdout:
       for line in stdout:
+        if line.startswith('total '):
+            continue
         line = line.rstrip(b'\r\n')
         try:
           statdata, filename = self.LsToStat(line)
@@ -238,6 +245,8 @@ class AdbFileSystem(object):
     with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -ald %s',
                       self.QuoteArgument(path))]) as stdout:
       for line in stdout:
+        if line.startswith('total '):
+            continue
         line = line.rstrip(b'\r\n')
         statdata, filename = self.LsToStat(line)
         self.stat_cache[path] = statdata
@@ -322,6 +331,8 @@ def BuildFileList(fs, path, prefix=b''):
       _print(b'Warning: could not cache lstat for %s', path)
     files.sort()
     for n in files:
+      if n == '.' or n == '..':
+        continue
       for t in BuildFileList(fs, path + b'/' + n, prefix + b'/' + n):
         yield t
   elif stat.S_ISREG(statresult.st_mode):
