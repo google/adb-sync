@@ -226,6 +226,7 @@ class AdbFileSystem(object):
     with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -al %s',
                       self.QuoteArgument(path + b'/'))]) as stdout:
       for line in stdout:
+        line = line.decode('utf-8')
         if line.startswith('total '):
             continue
         line = line.rstrip(b'\r\n')
@@ -245,6 +246,7 @@ class AdbFileSystem(object):
     with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -ald %s',
                       self.QuoteArgument(path))]) as stdout:
       for line in stdout:
+        line = line.decode('utf-8')
         if line.startswith('total '):
             continue
         line = line.rstrip(b'\r\n')
