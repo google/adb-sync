@@ -226,7 +226,7 @@ class AdbFileSystem(object):
     with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -al %s',
                       self.QuoteArgument(path + b'/'))]) as stdout:
       for line in stdout:
-        if line.startswith('total '):
+        if line.startswith(b'total '):
             continue
         line = line.rstrip(b'\r\n')
         try:
@@ -245,7 +245,7 @@ class AdbFileSystem(object):
     with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -ald %s',
                       self.QuoteArgument(path))]) as stdout:
       for line in stdout:
-        if line.startswith('total '):
+        if line.startswith(b'total '):
             continue
         line = line.rstrip(b'\r\n')
         statdata, filename = self.LsToStat(line)
@@ -331,7 +331,7 @@ def BuildFileList(fs, path, prefix=b''):
       _print(b'Warning: could not cache lstat for %s', path)
     files.sort()
     for n in files:
-      if n == '.' or n == '..':
+      if n == b'.' or n == b'..':
         continue
       for t in BuildFileList(fs, path + b'/' + n, prefix + b'/' + n):
         yield t
