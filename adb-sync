@@ -216,7 +216,7 @@ class AdbFileSystem(object):
 
   def listdir(self, path):  # os's name, so pylint: disable=g-bad-name
     """List the contents of a directory."""
-    with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -a %s',
+    with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -a1 %s',
                       self.QuoteArgument(path))]) as stdout:
       for line in stdout:
         yield line.rstrip(b'\r\n')
