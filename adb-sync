@@ -215,14 +215,7 @@ class AdbFileSystem(object):
     return True
 
   def listdir(self, path):  # os's name, so pylint: disable=g-bad-name
-    """List the contents of a directory."""
-    with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -a1 %s',
-                      self.QuoteArgument(path))]) as stdout:
-      for line in stdout:
-        yield line.rstrip(b'\r\n')
-
-  def CacheDirectoryLstat(self, path):
-    """Cache lstat for a directory."""
+    """List the contents of a directory, caching them for later lstat calls."""
     with self.Stdout(self.adb + [b'shell', _sprintf(b'ls -al %s',
                       self.QuoteArgument(path + b'/'))]) as stdout:
       for line in stdout:
@@ -234,9 +227,10 @@ class AdbFileSystem(object):
         except OSError:
           continue
         if filename is None:
-          _print(b'Warning: could not cache %s', line)
+          _print(b'Warning: could not parse %s', line)
         else:
           self.stat_cache[path + b'/' + filename] = statdata
+          yield filename
 
   def lstat(self, path):  # os's name, so pylint: disable=g-bad-name
     """Stat a file."""
@@ -324,11 +318,6 @@ def BuildFileList(fs, path, prefix=b''):
       files = list(fs.listdir(path))
     except OSError:
       return
-    try:
-      if hasattr(fs, 'CacheDirectoryLstat'):
-        fs.CacheDirectoryLstat(path)
-    except OSError:
-      _print(b'Warning: could not cache lstat for %s', path)
     files.sort()
     for n in files:
       if n == b'.' or n == b'..':
