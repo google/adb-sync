@@ -105,7 +105,7 @@ first) using a configuration like:
 ```
 Host sshhelper
 Port 2222
-ProxyCommand adb-channel tcp:%d com.arachnoid.sshelper/.SSHelperActivity 1
+ProxyCommand adb-channel tcp:%p com.arachnoid.sshelper/.SSHelperActivity 1
 ```
 
 After adding this to `~/.ssh/config`, run `ssh-copy-id sshhelper`.
