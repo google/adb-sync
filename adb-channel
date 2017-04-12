@@ -2,21 +2,33 @@
 
 set -e
 
-t=`mktemp -d -t adb-channel.XXXXXX`
-
 remote=${1}
 activity=${2}
 delay=${3}
 
-atexit() {
-  [ -z "${activity}" ] || adb shell am force-stop ${activity%%/*}
-  adb forward --remove localfilesystem:"${t}/sock"
-  rm -rf "${t}"
-}
-trap atexit EXIT
+case "${EXPERIMENTAL_ADB_CHANNEL_TCP_PORT}" in
+  '')
+    t=`mktemp -d -t adb-channel.XXXXXX`
+    adb_sock=localfilesystem:"${t}/sock"
+    socat_sock=unix:"${t}/sock"
+    atexit() {
+      [ -z "${activity}" ] || adb shell am force-stop ${activity%%/*}
+      adb forward --remove "${adb_sock}"
+      rm -rf "${t}"
+    }
+    trap atexit EXIT
+    ;;
+  *)
+    echo >&2 "WARNING: this ADB channel is open to everyone on this computer."
+    adb_sock=tcp:"${EXPERIMENTAL_ADB_CHANNEL_TCP_PORT}"
+    socat_sock=tcp:localhost:"${EXPERIMENTAL_ADB_CHANNEL_TCP_PORT}"
+    ;;
+esac
+
 trap 'exit 0' HUP INT ALRM TERM
 
 [ -z "${activity}" ] || adb shell am start -W ${activity}
 [ -z "${delay}" ] || sleep "${delay}"
-adb forward localfilesystem:"${t}/sock" "${remote}"
-socat stdio unix:"${t}/sock"
+
+adb forward "${adb_sock}" "${remote}"
+socat stdio "${socat_sock}"
