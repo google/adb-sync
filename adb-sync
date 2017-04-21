@@ -26,6 +26,7 @@ import stat
 import subprocess
 import sys
 import time
+import fnmatch
 
 
 def _sprintf(s, *args):
@@ -296,7 +297,7 @@ class AdbFileSystem(object):
       raise OSError('pull failed')
 
 
-def BuildFileList(fs, path, prefix=b''):
+def BuildFileList(fs, path, exclude = [], prefix=b''):
   """Builds a file list.
 
   Args:
@@ -308,6 +309,8 @@ def BuildFileList(fs, path, prefix=b''):
     File names from path (prefixed by prefix).
     Directories are yielded before their contents.
   """
+  if not exclude:
+      exclude = []
   try:
     statresult = fs.lstat(path)
   except OSError:
@@ -315,14 +318,14 @@ def BuildFileList(fs, path, prefix=b''):
   if stat.S_ISDIR(statresult.st_mode):
     yield prefix, statresult
     try:
-      files = list(fs.listdir(path))
+      files = [f for f in fs.listdir(path) if not any([fnmatch.fnmatch(f, pattern) for pattern in exclude])]
     except OSError:
       return
     files.sort()
     for n in files:
       if n == b'.' or n == b'..':
         continue
-      for t in BuildFileList(fs, path + b'/' + n, prefix + b'/' + n):
+      for t in BuildFileList(fs, path + b'/' + n, exclude, prefix + b'/' + n):
         yield t
   elif stat.S_ISREG(statresult.st_mode) or stat.S_ISLNK(statresult.st_mode):
     yield prefix, statresult
@@ -400,11 +403,12 @@ def DiffLists(a, b):
 class FileSyncer(object):
   """File synchronizer."""
 
-  def __init__(self, adb, local_path, remote_path, local_to_remote,
+  def __init__(self, adb, local_path, remote_path, exclude, local_to_remote,
                remote_to_local, preserve_times, delete_missing, allow_overwrite,
                allow_replace, dry_run):
     self.local = local_path
     self.remote = remote_path
+    self.exclude = exclude
     self.adb = adb
     self.local_to_remote = local_to_remote
     self.remote_to_local = remote_to_local
@@ -426,8 +430,8 @@ class FileSyncer(object):
   def ScanAndDiff(self):
     """Scans the local and remote locations and identifies differences."""
     _print(b'Scanning and diffing...')
-    locallist = BuildFileList(os, self.local)
-    remotelist = BuildFileList(self.adb, self.remote)
+    locallist = BuildFileList(os, self.local, self.exclude)
+    remotelist = BuildFileList(self.adb, self.remote, self.exclude)
     self.local_only, self.both, self.remote_only = DiffLists(locallist,
                                                              remotelist)
     if not self.local_only and not self.both and not self.remote_only:
@@ -679,6 +683,8 @@ def main(*args):
   parser.add_argument('-d', '--delete', action='store_true',
                       help='Delete files from DST that are not present on '+
                       'SRC. Mutually exclusive with -2.')
+  parser.add_argument('--exclude', metavar='PATTERN', action='append',
+                      help='Exclude files matching PATTERN')
   parser.add_argument('-f', '--force', action='store_true',
                       help='Allow deleting files/directories when having to '+
                       'replace a file by a directory or vice versa. This is '+
@@ -756,7 +762,7 @@ def main(*args):
 
   for i in range(len(localpaths)):
     _print(b'Sync: local %s, remote %s', localpaths[i], remotepaths[i])
-    syncer = FileSyncer(adb, localpaths[i], remotepaths[i],
+    syncer = FileSyncer(adb, localpaths[i], remotepaths[i], args.exclude,
                         local_to_remote, remote_to_local, preserve_times,
                         delete_missing, allow_overwrite, allow_replace, dry_run)
     if not syncer.IsWorking():
