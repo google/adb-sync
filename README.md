@@ -98,20 +98,20 @@ convenience wrapper to connect a networking socket on the Android device to
 file descriptors on the PC side. It can even launch and shut down the given
 application automatically!
 
-It is best used as a `ProxyCommand` for SSH (intall
+It is best used as a `ProxyCommand` for SSH (install
 [SSHelper](https://play.google.com/store/apps/details?id=com.arachnoid.sshelper)
 first) using a configuration like:
 
 ```
-Host sshhelper
+Host sshelper
 Port 2222
 ProxyCommand adb-channel tcp:%p com.arachnoid.sshelper/.SSHelperActivity 1
 ```
 
-After adding this to `~/.ssh/config`, run `ssh-copy-id sshhelper`.
+After adding this to `~/.ssh/config`, run `ssh-copy-id sshelper`.
 
 Congratulations! You can now use `rsync`, `sshfs` etc. to the host name
-`sshhelper`.
+`sshelper`.
 
 Contributing
 ============
