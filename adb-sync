@@ -296,7 +296,7 @@ class AdbFileSystem(object):
       raise OSError('pull failed')
 
 
-def BuildFileList(fs, path, prefix=b''):
+def BuildFileList(fs, path, follow_links=False, prefix=b''):
   """Builds a file list.
 
   Args:
@@ -309,7 +309,10 @@ def BuildFileList(fs, path, prefix=b''):
     Directories are yielded before their contents.
   """
   try:
-    statresult = fs.lstat(path)
+    if follow_links:
+      statresult = fs.stat(path)
+    else:
+      statresult = fs.lstat(path)
   except OSError:
     return
   if stat.S_ISDIR(statresult.st_mode):
@@ -322,9 +325,10 @@ def BuildFileList(fs, path, prefix=b''):
     for n in files:
       if n == b'.' or n == b'..':
         continue
-      for t in BuildFileList(fs, path + b'/' + n, prefix + b'/' + n):
+      for t in BuildFileList(fs, path + b'/' + n, follow_links,
+                             prefix + b'/' + n):
         yield t
-  elif stat.S_ISREG(statresult.st_mode) or stat.S_ISLNK(statresult.st_mode):
+  elif stat.S_ISREG(statresult.st_mode):
     yield prefix, statresult
   else:
     _print(b'Note: unsupported file: %s', path)
@@ -402,7 +406,7 @@ class FileSyncer(object):
 
   def __init__(self, adb, local_path, remote_path, local_to_remote,
                remote_to_local, preserve_times, delete_missing, allow_overwrite,
-               allow_replace, dry_run):
+               allow_replace, dry_run, copy_links):
     self.local = local_path
     self.remote = remote_path
     self.adb = adb
@@ -413,6 +417,7 @@ class FileSyncer(object):
     self.allow_overwrite = allow_overwrite
     self.allow_replace = allow_replace
     self.dry_run = dry_run
+    self.copy_links = copy_links
     self.local_only = None
     self.both = None
     self.remote_only = None
@@ -426,7 +431,7 @@ class FileSyncer(object):
   def ScanAndDiff(self):
     """Scans the local and remote locations and identifies differences."""
     _print(b'Scanning and diffing...')
-    locallist = BuildFileList(os, self.local)
+    locallist = BuildFileList(os, self.local, self.copy_links)
     remotelist = BuildFileList(self.adb, self.remote)
     self.local_only, self.both, self.remote_only = DiffLists(locallist,
                                                              remotelist)
@@ -686,6 +691,8 @@ def main(*args):
   parser.add_argument('-n', '--no-clobber', action='store_true',
                       help='Do not ever overwrite any '+
                       'existing files. Mutually exclusive with -f.')
+  parser.add_argument('-L', '--copy-links', action='store_true',
+                      help='transform symlink into referent file/dir')
   parser.add_argument('--dry-run',action='store_true',
                       help='Do not do anything - just show what would '+
                       'be done.')
@@ -727,6 +734,7 @@ def main(*args):
   allow_replace = args.force
   allow_overwrite = not args.no_clobber
   dry_run = args.dry_run
+  copy_links = args.copy_links
   local_to_remote = True
   remote_to_local = False
   if args.two_way:
@@ -758,7 +766,8 @@ def main(*args):
     _print(b'Sync: local %s, remote %s', localpaths[i], remotepaths[i])
     syncer = FileSyncer(adb, localpaths[i], remotepaths[i],
                         local_to_remote, remote_to_local, preserve_times,
-                        delete_missing, allow_overwrite, allow_replace, dry_run)
+                        delete_missing, allow_overwrite, allow_replace, dry_run,
+                        copy_links)
     if not syncer.IsWorking():
       _print(b'Device not connected or not working.')
       return
