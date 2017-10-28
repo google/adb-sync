@@ -26,6 +26,7 @@ import stat
 import subprocess
 import sys
 import time
+import unicodedata
 
 
 def _sprintf(s, *args):
@@ -296,7 +297,7 @@ class AdbFileSystem(object):
       raise OSError('pull failed')
 
 
-def BuildFileList(fs, path, prefix=b''):
+def BuildFileList(fs, path, prefix=b'', normalize_func=lambda x:x):
   """Builds a file list.
 
   Args:
@@ -318,11 +319,11 @@ def BuildFileList(fs, path, prefix=b''):
       files = list(fs.listdir(path))
     except OSError:
       return
-    files.sort()
+    files.sort(key=normalize_func)
     for n in files:
       if n == b'.' or n == b'..':
         continue
-      for t in BuildFileList(fs, path + b'/' + n, prefix + b'/' + n):
+      for t in BuildFileList(fs, path + b'/' + n, prefix + b'/' + n, normalize_func):
         yield t
   elif stat.S_ISREG(statresult.st_mode) or stat.S_ISLNK(statresult.st_mode):
     yield prefix, statresult
@@ -330,7 +331,7 @@ def BuildFileList(fs, path, prefix=b''):
     _print(b'Note: unsupported file: %s', path)
 
 
-def DiffLists(a, b):
+def DiffLists(a, b, normalize_func):
   """Compares two lists.
 
   Args:
@@ -370,7 +371,10 @@ def DiffLists(a, b):
       except StopIteration:
         b_active = False
         break
-    if a_item[0] == b_item[0]:
+
+    a0 = normalize_func(a_item[0])
+    b0 = normalize_func(b_item[0])
+    if a0 == b0:
       both.append(tuple([a_item[0]] + list(a_item[1:]) + list(b_item[1:])))
       a_available = False
       b_available = False
@@ -402,7 +406,7 @@ class FileSyncer(object):
 
   def __init__(self, adb, local_path, remote_path, local_to_remote,
                remote_to_local, preserve_times, delete_missing, allow_overwrite,
-               allow_replace, dry_run):
+               allow_replace, dry_run, no_file_name_normalize):
     self.local = local_path
     self.remote = remote_path
     self.adb = adb
@@ -413,6 +417,7 @@ class FileSyncer(object):
     self.allow_overwrite = allow_overwrite
     self.allow_replace = allow_replace
     self.dry_run = dry_run
+    self.no_file_name_normalize = no_file_name_normalize
     self.local_only = None
     self.both = None
     self.remote_only = None
@@ -426,10 +431,14 @@ class FileSyncer(object):
   def ScanAndDiff(self):
     """Scans the local and remote locations and identifies differences."""
     _print(b'Scanning and diffing...')
-    locallist = BuildFileList(os, self.local)
-    remotelist = BuildFileList(self.adb, self.remote)
+    normalize_func = lambda x: x
+    if not self.no_file_name_normalize:
+        normalize_func = lambda x: unicodedata.normalize('NFC', x.decode('utf8'))
+    locallist = BuildFileList(os, self.local, normalize_func=normalize_func)
+    remotelist = BuildFileList(self.adb, self.remote, normalize_func = normalize_func)
     self.local_only, self.both, self.remote_only = DiffLists(locallist,
-                                                             remotelist)
+                                                             remotelist,
+                                                             normalize_func)
     if not self.local_only and not self.both and not self.remote_only:
       _print(b'No files seen. User error?')
     self.src_to_dst = (self.local_to_remote, self.remote_to_local)
@@ -689,6 +698,8 @@ def main(*args):
   parser.add_argument('--dry-run',action='store_true',
                       help='Do not do anything - just show what would '+
                       'be done.')
+  parser.add_argument('--no-file-name-normalize',action='store_true',
+                      help='Do not file name normalize')
   args = parser.parse_args()
   args_encoding = locale.getdefaultlocale()[1]
 
@@ -758,7 +769,8 @@ def main(*args):
     _print(b'Sync: local %s, remote %s', localpaths[i], remotepaths[i])
     syncer = FileSyncer(adb, localpaths[i], remotepaths[i],
                         local_to_remote, remote_to_local, preserve_times,
-                        delete_missing, allow_overwrite, allow_replace, dry_run)
+                        delete_missing, allow_overwrite, allow_replace, dry_run,
+                        args.no_file_name_normalize)
     if not syncer.IsWorking():
       _print(b'Device not connected or not working.')
       return
