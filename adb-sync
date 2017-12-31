@@ -582,7 +582,8 @@ class FileSyncer(object):
             with self.InterruptProtection(self.dst_fs[i], dst_name):
               if not self.dry_run:
                 self.copy[i](src_name, dst_name)
-              self.num_bytes += s.st_size
+              if stat.S_ISREG(s.st_mode):
+                self.num_bytes += s.st_size
           if not self.dry_run:
             if self.preserve_times:
               _print(b'%s-Times: accessed %s, modified %s',
