@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: UTF-8 -*-
 
 # Copyright 2014 Google Inc. All rights reserved.
 #
@@ -14,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """Sync files from/to an Android device."""
 
 from __future__ import unicode_literals
@@ -26,7 +28,9 @@ import stat
 import subprocess
 import sys
 import time
-
+import sys
+reload(sys)
+sys.setdefaultencoding('UTF-8')
 
 def _sprintf(s, *args):
     # To be able to use string formatting, we first have to covert to
