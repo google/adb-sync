@@ -292,7 +292,7 @@ class AdbFileSystem(object):
 
   def Pull(self, src, dst):
     """Pull a file from the Android device to the local file system."""
-    if subprocess.call(self.adb + [b'pull', src, dst]) != 0:
+    if subprocess.call(self.adb + [b'pull', b'-a', src, dst]) != 0:
       raise OSError('pull failed')
 
 
