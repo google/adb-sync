@@ -762,21 +762,20 @@ def main() -> None:
       action='store_true',
       help='Do not do anything - just show what would be done.')
   args = parser.parse_args()
-  args_encoding = locale.getdefaultlocale()[1] or 'ascii'
 
-  localpatterns = [x.encode(args_encoding) for x in args.source]
-  remotepath = args.destination.encode(args_encoding)
-  adb_args = args.adb.encode(args_encoding).split(b' ')
+  localpatterns = [os.fsencode(x) for x in args.source]
+  remotepath = os.fsencode(args.destination)
+  adb_args = os.fsencode(args.adb).split(b' ')
   if args.device:
     adb_args += [b'-d']
   if args.emulator:
     adb_args += [b'-e']
   if args.serial:
-    adb_args += [b'-s', args.serial.encode(args_encoding)]
+    adb_args += [b'-s', os.fsencode(args.serial)]
   if args.host:
-    adb_args += [b'-H', args.host.encode(args_encoding)]
+    adb_args += [b'-H', os.fsencode(args.host)]
   if args.port:
-    adb_args += [b'-P', args.port.encode(args_encoding)]
+    adb_args += [b'-P', os.fsencode(args.port)]
   adb = AdbFileSystem(adb_args)
 
   # Expand wildcards, but only on the remote side.
