@@ -16,7 +16,7 @@ atexit() {
 trap atexit EXIT
 trap 'exit 0' HUP INT ALRM TERM
 
-[ -z "${activity}" ] || adb shell am start -W ${activity}
+[ -z "${activity}" ] || adb shell -n am start -W ${activity}
 [ -z "${delay}" ] || sleep "${delay}"
 adb forward localfilesystem:"${t}/sock" "${remote}"
 socat stdio unix:"${t}/sock"
