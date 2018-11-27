@@ -26,7 +26,8 @@ import stat
 import subprocess
 import sys
 import time
-from typing import Callable, cast, Dict, List, IO, Iterable, Tuple
+from types import TracebackType
+from typing import Callable, cast, Dict, List, IO, Iterable, Optional, Tuple, Type
 
 
 class OSLike(object):
@@ -73,7 +74,9 @@ class Stdout(object):
   def __enter__(self) -> IO:
     return self.popen.stdout
 
-  def __exit__(self, exc_type, exc_value, traceback) -> bool:
+  def __exit__(self, exc_type: Optional[Type[BaseException]],
+               exc_val: Optional[Exception],
+               exc_tb: Optional[TracebackType]) -> bool:
     self.popen.stdout.close()
     if self.popen.wait() != 0:
       raise OSError('Subprocess exited with nonzero status.')
@@ -130,7 +133,7 @@ class AdbFileSystem(OSLike):
                              (?(S_IFLNK) .* | (?P<filename> .*))
                              $""", re.DOTALL | re.VERBOSE)
 
-  def LsToStat(self, line) -> Tuple[os.stat_result, bytes]:
+  def LsToStat(self, line: bytes) -> Tuple[os.stat_result, bytes]:
     """Convert a line from 'ls -l' output to a stat result.
 
     Args:
@@ -294,25 +297,25 @@ class AdbFileSystem(OSLike):
          b'touch -at %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
 
-  def glob(self, path) -> Iterable[bytes]:
+  def glob(self, path: bytes) -> Iterable[bytes]:
     with Stdout(
         self.adb +
         [b'shell', b'for p in %s; do echo "$p"; done' % (path,)]) as stdout:
       for line in stdout:
         yield line.rstrip(b'\r\n')
 
-  def Push(self, src: bytes, dst: bytes):
+  def Push(self, src: bytes, dst: bytes) -> None:
     """Push a file from the local file system to the Android device."""
     if subprocess.call(self.adb + [b'push', src, dst]) != 0:
       raise OSError('push failed')
 
-  def Pull(self, src: bytes, dst: bytes):
+  def Pull(self, src: bytes, dst: bytes) -> None:
     """Pull a file from the Android device to the local file system."""
     if subprocess.call(self.adb + [b'pull', src, dst]) != 0:
       raise OSError('pull failed')
 
 
-def BuildFileList(fs, path: bytes,
+def BuildFileList(fs: OSLike, path: bytes,
                   prefix: bytes) -> Iterable[Tuple[bytes, os.stat_result]]:
   """Builds a file list.
 
@@ -366,53 +369,32 @@ def DiffLists(a: Iterable[Tuple[bytes, os.stat_result]],
   b_only = []  # type: List[Tuple[bytes, os.stat_result]]
   both = []  # type: List[Tuple[bytes, os.stat_result, os.stat_result]]
 
-  a_iter = iter(sorted(a))
-  b_iter = iter(sorted(b))
-  a_active = True
-  b_active = True
-  a_available = False
-  b_available = False
-  a_item = None
-  b_item = None
+  a_revlist = sorted(a)
+  a_revlist.reverse()
+  b_revlist = sorted(b)
+  b_revlist.reverse()
 
-  while a_active and b_active:
-    if not a_available:
-      try:
-        a_item = next(a_iter)
-        a_available = True
-      except StopIteration:
-        a_active = False
-        break
-    if not b_available:
-      try:
-        b_item = next(b_iter)
-        b_available = True
-      except StopIteration:
-        b_active = False
-        break
+  while True:
+    if not a_revlist:
+      b_only.extend(reversed(b_revlist))
+      break
+    if not b_revlist:
+      a_only.extend(reversed(a_revlist))
+      break
+    a_item = a_revlist[len(a_revlist) - 1]
+    b_item = b_revlist[len(b_revlist) - 1]
     if a_item[0] == b_item[0]:
       both.append((a_item[0], a_item[1], b_item[1]))
-      a_available = False
-      b_available = False
+      a_revlist.pop()
+      b_revlist.pop()
     elif a_item[0] < b_item[0]:
       a_only.append(a_item)
-      a_available = False
+      a_revlist.pop()
     elif a_item[0] > b_item[0]:
       b_only.append(b_item)
-      b_available = False
+      b_revlist.pop()
     else:
       raise
-
-  if a_active:
-    if a_available:
-      a_only.append(cast(Tuple[bytes, os.stat_result], a_item))
-    for item in a_iter:
-      a_only.append(item)
-  if b_active:
-    if b_available:
-      b_only.append(cast(Tuple[bytes, os.stat_result], b_item))
-    for item in b_iter:
-      b_only.append(item)
 
   return a_only, both, b_only
 
@@ -444,7 +426,9 @@ class DeleteInterruptedFile(object):
   def __enter__(self) -> None:
     pass
 
-  def __exit__(self, exc_type, exc_value, traceback) -> bool:
+  def __exit__(self, exc_type: Optional[Type[BaseException]],
+               exc_val: Optional[Exception],
+               exc_tb: Optional[TracebackType]) -> bool:
     if exc_type is not None:
       logging.info('Interrupted-%s-Delete: %r',
                    'Pull' if self.fs == os else 'Push', self.name)
@@ -495,7 +479,7 @@ class FileSyncer(object):
   def ScanAndDiff(self) -> None:
     """Scans the local and remote locations and identifies differences."""
     logging.info('Scanning and diffing...')
-    locallist = BuildFileList(os, self.local, b'')
+    locallist = BuildFileList(cast(OSLike, os), self.local, b'')
     remotelist = BuildFileList(self.adb, self.remote, b'')
     self.local_only, self.both, self.remote_only = DiffLists(
         locallist, remotelist)
@@ -669,7 +653,7 @@ def FixPath(src: bytes, dst: bytes) -> Tuple[bytes, bytes]:
   return (src, dst)
 
 
-def main(*unused_args) -> None:
+def main() -> None:
   parser = argparse.ArgumentParser(
       description='Synchronize a directory between an Android device and the ' +
       'local file system')
@@ -855,4 +839,4 @@ def main(*unused_args) -> None:
 
 
 if __name__ == '__main__':
-  main(*sys.argv)
+  main()
