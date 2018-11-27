@@ -17,14 +17,12 @@
 
 from __future__ import unicode_literals
 import argparse
-import glob
 import locale
 import logging
 import os
 import re
 import stat
 import subprocess
-import sys
 import time
 from types import TracebackType
 from typing import Callable, cast, Dict, List, IO, Iterable, Optional, Tuple, Type
@@ -32,25 +30,28 @@ from typing import Callable, cast, Dict, List, IO, Iterable, Optional, Tuple, Ty
 
 class OSLike(object):
 
-  def listdir(self, path: bytes) -> Iterable[bytes]:
+  def listdir(self, path: bytes) -> Iterable[bytes]:  # os's name, so pylint: disable=g-bad-name
     raise NotImplementedError('Abstract')
 
-  def lstat(self, path: bytes) -> os.stat_result:
+  def lstat(self, path: bytes) -> os.stat_result:  # os's name, so pylint: disable=g-bad-name
     raise NotImplementedError('Abstract')
 
-  def unlink(self, path: bytes) -> None:
+  def unlink(self, path: bytes) -> None:  # os's name, so pylint: disable=g-bad-name
     raise NotImplementedError('Abstract')
 
-  def rmdir(self, path: bytes) -> None:
+  def rmdir(self, path: bytes) -> None:  # os's name, so pylint: disable=g-bad-name
     raise NotImplementedError('Abstract')
 
-  def makedirs(self, path: bytes) -> None:
+  def makedirs(self, path: bytes) -> None:  # os's name, so pylint: disable=g-bad-name
     raise NotImplementedError('Abstract')
 
-  def utime(self, path: bytes, times: Tuple[float, float]) -> None:
+  def utime(self, path: bytes, times: Tuple[float, float]) -> None:  # os's name, so pylint: disable=g-bad-name
     raise NotImplementedError('Abstract')
 
-  def glob(self, path: bytes) -> Iterable[bytes]:
+
+class GlobLike(object):
+
+  def glob(self, path: bytes) -> Iterable[bytes]:  # glob's name, so pylint: disable=g-bad-name
     raise NotImplementedError('Abstract')
 
 
@@ -83,7 +84,7 @@ class Stdout(object):
     return False
 
 
-class AdbFileSystem(OSLike):
+class AdbFileSystem(GlobLike, OSLike):
   """Mimics os's file interface but uses the adb utility."""
 
   def __init__(self, adb: List[bytes]) -> None:
@@ -118,16 +119,16 @@ class AdbFileSystem(OSLike):
                              [ ]+
                              [^ ]+  # Group name/ID.
                              [ ]+
-                             (?(S_IFBLK) [^ ]+[ ]+[^ ]+[ ]+)    # Device numbers.
-                             (?(S_IFCHR) [^ ]+[ ]+[^ ]+[ ]+)    # Device numbers.
-                             (?(S_IFDIR) [0-9]+ [ ]+)?          # directory Size.
+                             (?(S_IFBLK) [^ ]+[ ]+[^ ]+[ ]+)  # Device numbers.
+                             (?(S_IFCHR) [^ ]+[ ]+[^ ]+[ ]+)  # Device numbers.
+                             (?(S_IFDIR) [0-9]+ [ ]+)?        # directory Size.
                              (?(S_IFREG)
-                               (?P<st_size> [0-9]+)             # Size.
+                               (?P<st_size> [0-9]+)           # Size.
                                [ ]+)
                              (?P<st_mtime>
-                               [0-9]{4}-[0-9]{2}-[0-9]{2}       # Date.
+                               [0-9]{4}-[0-9]{2}-[0-9]{2}     # Date.
                                [ ]
-                               [0-9]{2}:[0-9]{2})               # Time.
+                               [0-9]{2}:[0-9]{2})             # Time.
                              [ ]
                              # Don't capture filename for symlinks (ambiguous).
                              (?(S_IFLNK) .* | (?P<filename> .*))
@@ -253,7 +254,7 @@ class AdbFileSystem(OSLike):
         if line.startswith(b'total '):
           continue
         line = line.rstrip(b'\r\n')
-        statdata, filename = self.LsToStat(line)
+        statdata, _ = self.LsToStat(line)
         self.stat_cache[path] = statdata
         return statdata
     raise OSError('No such file or directory')
@@ -297,7 +298,7 @@ class AdbFileSystem(OSLike):
          b'touch -at %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
 
-  def glob(self, path: bytes) -> Iterable[bytes]:
+  def glob(self, path: bytes) -> Iterable[bytes]:  # glob's name, so pylint: disable=g-bad-name
     with Stdout(
         self.adb +
         [b'shell', b'for p in %s; do echo "$p"; done' % (path,)]) as stdout:
@@ -626,7 +627,7 @@ class FileSyncer(object):
                    dt)
 
 
-def ExpandWildcards(globber: OSLike, path: bytes) -> Iterable[bytes]:
+def ExpandWildcards(globber: GlobLike, path: bytes) -> Iterable[bytes]:
   if path.find(b'?') == -1 and path.find(b'*') == -1 and path.find(b'[') == -1:
     return [path]
   return globber.glob(path)
@@ -654,25 +655,27 @@ def FixPath(src: bytes, dst: bytes) -> Tuple[bytes, bytes]:
 
 
 def main() -> None:
+  logging.basicConfig(level=logging.INFO)
+
   parser = argparse.ArgumentParser(
-      description='Synchronize a directory between an Android device and the ' +
+      description='Synchronize a directory between an Android device and the '
       'local file system')
   parser.add_argument(
       'source',
       metavar='SRC',
       type=str,
       nargs='+',
-      help='The directory to read files/directories from. ' +
-      'This must be a local path if -R is not specified, ' +
-      'and an Android path if -R is specified. If SRC does ' +
-      'not end with a final slash, its last path component ' +
+      help='The directory to read files/directories from. '
+      'This must be a local path if -R is not specified, '
+      'and an Android path if -R is specified. If SRC does '
+      'not end with a final slash, its last path component '
       'is appended to DST (like rsync does).')
   parser.add_argument(
       'destination',
       metavar='DST',
       type=str,
-      help='The directory to write files/directories to. ' +
-      'This must be an Android path if -R is not specified, ' +
+      help='The directory to write files/directories to. '
+      'This must be an Android path if -R is not specified, '
       'and a local path if -R is specified.')
   parser.add_argument(
       '-e',
@@ -684,38 +687,38 @@ def main() -> None:
   parser.add_argument(
       '--device',
       action='store_true',
-      help='Directs command to the only connected USB device; ' +
-      'returns an error if more than one USB device is ' + 'present. ' +
+      help='Directs command to the only connected USB device; '
+      'returns an error if more than one USB device is present. '
       'Corresponds to the "-d" option of adb.')
   parser.add_argument(
       '--emulator',
       action='store_true',
-      help='Directs command to the only running emulator; ' +
-      'returns an error if more than one emulator is running. ' +
+      help='Directs command to the only running emulator; '
+      'returns an error if more than one emulator is running. '
       'Corresponds to the "-e" option of adb.')
   parser.add_argument(
       '-s',
       '--serial',
       metavar='DEVICE',
       type=str,
-      help='Directs command to the device or emulator with ' +
-      'the given serial number or qualifier. Overrides ' +
-      'ANDROID_SERIAL environment variable. Use "adb devices" ' +
-      'to list all connected devices with their respective ' + 'serial number. '
-      + 'Corresponds to the "-s" option of adb.')
+      help='Directs command to the device or emulator with '
+      'the given serial number or qualifier. Overrides '
+      'ANDROID_SERIAL environment variable. Use "adb devices" '
+      'to list all connected devices with their respective serial number. '
+      'Corresponds to the "-s" option of adb.')
   parser.add_argument(
       '-H',
       '--host',
       metavar='HOST',
       type=str,
-      help='Name of adb server host (default: localhost). ' +
+      help='Name of adb server host (default: localhost). '
       'Corresponds to the "-H" option of adb.')
   parser.add_argument(
       '-P',
       '--port',
       metavar='PORT',
       type=str,
-      help='Port of adb server (default: 5037). ' +
+      help='Port of adb server (default: 5037). '
       'Corresponds to the "-P" option of adb.')
   parser.add_argument(
       '-R',
@@ -726,54 +729,57 @@ def main() -> None:
       '-2',
       '--two-way',
       action='store_true',
-      help='Two-way sync (compare modification time; after ' +
-      'the sync, both sides will have all files in the ' +
-      'respective newest version. This relies on the clocks ' +
+      help='Two-way sync (compare modification time; after '
+      'the sync, both sides will have all files in the '
+      'respective newest version. This relies on the clocks '
       'of your system and the device to match.')
-  #parser.add_argument('-t', '--times', action='store_true',
-  #                    help='Preserve modification times when copying.')
+  parser.add_argument(
+      '-t',
+      '--times',
+      action='store_true',
+      help='Preserve modification times when copying.')
   parser.add_argument(
       '-d',
       '--delete',
       action='store_true',
-      help='Delete files from DST that are not present on ' +
+      help='Delete files from DST that are not present on '
       'SRC. Mutually exclusive with -2.')
   parser.add_argument(
       '-f',
       '--force',
       action='store_true',
-      help='Allow deleting files/directories when having to ' +
-      'replace a file by a directory or vice versa. This is ' +
+      help='Allow deleting files/directories when having to '
+      'replace a file by a directory or vice versa. This is '
       'disabled by default to prevent large scale accidents.')
   parser.add_argument(
       '-n',
       '--no-clobber',
       action='store_true',
-      help='Do not ever overwrite any ' +
+      help='Do not ever overwrite any '
       'existing files. Mutually exclusive with -f.')
   parser.add_argument(
       '--dry-run',
       action='store_true',
-      help='Do not do anything - just show what would ' + 'be done.')
+      help='Do not do anything - just show what would be done.')
   args = parser.parse_args()
-  args_encoding = locale.getdefaultlocale()[1]
+  args_encoding = locale.getdefaultlocale()[1] or 'ascii'
 
   localpatterns = [x.encode(args_encoding) for x in args.source]
   remotepath = args.destination.encode(args_encoding)
-  adb = args.adb.encode(args_encoding).split(b' ')
+  adb_args = args.adb.encode(args_encoding).split(b' ')
   if args.device:
-    adb += [b'-d']
+    adb_args += [b'-d']
   if args.emulator:
-    adb += [b'-e']
-  if args.serial != None:
-    adb += [b'-s', args.serial.encode(args_encoding)]
-  if args.host != None:
-    adb += [b'-H', args.host.encode(args_encoding)]
-  if args.port != None:
-    adb += [b'-P', args.port.encode(args_encoding)]
-  adb = AdbFileSystem(adb)
+    adb_args += [b'-e']
+  if args.serial:
+    adb_args += [b'-s', args.serial.encode(args_encoding)]
+  if args.host:
+    adb_args += [b'-H', args.host.encode(args_encoding)]
+  if args.port:
+    adb_args += [b'-P', args.port.encode(args_encoding)]
+  adb = AdbFileSystem(adb_args)
 
-  # Expand wildcards.
+  # Expand wildcards, but only on the remote side.
   localpaths = []
   remotepaths = []
   if args.reverse:
@@ -788,7 +794,7 @@ def main() -> None:
       localpaths.append(src)
       remotepaths.append(dst)
 
-  preserve_times = False  # args.times
+  preserve_times = args.times
   delete_missing = args.delete
   allow_replace = args.force
   allow_overwrite = not args.no_clobber
