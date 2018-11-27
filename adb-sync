@@ -28,16 +28,6 @@ import sys
 import time
 
 
-def _sprintf(s, *args):
-  # To be able to use string formatting, we first have to covert to
-  # unicode strings; however, we must do so in a way that preserves all
-  # bytes, and convert back at the end. An encoding that maps all byte
-  # values to different Unicode codepoints is cp437.
-  return (s.decode('cp437') % tuple([
-      (x.decode('cp437') if type(x) == bytes else x) for x in args
-  ])).encode('cp437')
-
-
 class AdbFileSystem(object):
   """Mimics os's file interface but uses the adb utility."""
 
@@ -201,8 +191,8 @@ class AdbFileSystem(object):
       good = False
       with self.Stdout(
           self.adb +
-          [b'shell',
-           _sprintf(b'date +%s', self.QuoteArgument(test_string))]) as stdout:
+          [b'shell', b'date +%s' %
+           (self.QuoteArgument(test_string),)]) as stdout:
         for line in stdout:
           line = line.rstrip(b'\r\n')
           if line == test_string:
@@ -215,8 +205,8 @@ class AdbFileSystem(object):
     """List the contents of a directory, caching them for later lstat calls."""
     with self.Stdout(
         self.adb +
-        [b'shell',
-         _sprintf(b'ls -al %s', self.QuoteArgument(path + b'/'))]) as stdout:
+        [b'shell', b'ls -al %s' %
+         (self.QuoteArgument(path + b'/'),)]) as stdout:
       for line in stdout:
         if line.startswith(b'total '):
           continue
@@ -237,8 +227,7 @@ class AdbFileSystem(object):
       return self.stat_cache[path]
     with self.Stdout(
         self.adb +
-        [b'shell', _sprintf(b'ls -ald %s', self.QuoteArgument(path))]
-    ) as stdout:
+        [b'shell', b'ls -ald %s' % (self.QuoteArgument(path),)]) as stdout:
       for line in stdout:
         if line.startswith(b'total '):
           continue
@@ -251,22 +240,21 @@ class AdbFileSystem(object):
   def unlink(self, path):  # os's name, so pylint: disable=g-bad-name
     """Delete a file."""
     if subprocess.call(
-        self.adb +
-        [b'shell', _sprintf(b'rm %s', self.QuoteArgument(path))]) != 0:
+        self.adb + [b'shell', b'rm %s' % (self.QuoteArgument(path),)]) != 0:
       raise OSError('unlink failed')
 
   def rmdir(self, path):  # os's name, so pylint: disable=g-bad-name
     """Delete a directory."""
     if subprocess.call(
         self.adb +
-        [b'shell', _sprintf(b'rmdir %s', self.QuoteArgument(path))]) != 0:
+        [b'shell', b'rmdir %s' % (self.QuoteArgument(path),)]) != 0:
       raise OSError('rmdir failed')
 
   def makedirs(self, path):  # os's name, so pylint: disable=g-bad-name
     """Create a directory."""
     if subprocess.call(
         self.adb +
-        [b'shell', _sprintf(b'mkdir -p %s', self.QuoteArgument(path))]) != 0:
+        [b'shell', b'mkdir -p %s' % (self.QuoteArgument(path),)]) != 0:
       raise OSError('mkdir failed')
 
   def utime(self, path, times):
@@ -274,23 +262,22 @@ class AdbFileSystem(object):
     """Set the time of a file to a specified unix time."""
     atime, mtime = times
     timestr = time.strftime(b'%Y%m%d.%H%M%S', time.localtime(mtime))
-    if subprocess.call(self.adb + [
-        b'shell',
-        _sprintf(b'touch -mt %s %s', timestr, self.QuoteArgument(path))
-    ]) != 0:
+    if subprocess.call(
+        self.adb +
+        [b'shell',
+         b'touch -mt %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
     timestr = time.strftime(b'%Y%m%d.%H%M%S', time.localtime(atime))
-    if subprocess.call(self.adb + [
-        b'shell',
-        _sprintf(b'touch -at %s %s', timestr, self.QuoteArgument(path))
-    ]) != 0:
+    if subprocess.call(
+        self.adb +
+        [b'shell',
+         b'touch -at %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
 
   def glob(self, path):
     with self.Stdout(
         self.adb +
-        [b'shell', _sprintf(b'for p in %s; do echo "$p"; done', path)]
-    ) as stdout:
+        [b'shell', b'for p in %s; do echo "$p"; done' % (path,)]) as stdout:
       for line in stdout:
         yield line.rstrip(b'\r\n')
 
