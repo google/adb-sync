@@ -558,10 +558,6 @@ class FileSyncer(object):
       elif stat.S_ISDIR(localstat.st_mode) or stat.S_ISDIR(remotestat.st_mode):
         # Dir vs file? Nothing to do here yet.
         pass
-      else:
-        # File vs file? Compare sizes.
-        if localstat.st_size == remotestat.st_size:
-          continue
       l2r = self.local_to_remote
       r2l = self.remote_to_local
       if l2r and r2l:
@@ -573,6 +569,9 @@ class FileSyncer(object):
           r2l = False
         elif localminute < remoteminute:
           l2r = False
+        else:
+          # same time stamp
+          continue
       if l2r and r2l:
         logging.warning('Unresolvable: %r', name)
         continue
