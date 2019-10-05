@@ -376,7 +376,7 @@ def BuildFileList(fs: OSLike, path: bytes, follow_links: bool,
   elif stat.S_ISLNK(statresult.st_mode) and not follow_links:
     yield prefix, statresult
   else:
-    logging.info('Unsupported file: %r.', path)
+    logging.info('Unsupported file: %r.', path.decode('utf-8'))
 
 
 def DiffLists(a: Iterable[Tuple[bytes, os.stat_result]],
@@ -461,7 +461,7 @@ class DeleteInterruptedFile(object):
                exc_tb: Optional[TracebackType]) -> bool:
     if exc_type is not None:
       logging.info('Interrupted-%s-Delete: %r',
-                   'Pull' if self.fs == os else 'Push', self.name)
+                   'Pull' if self.fs == os else 'Push', self.name.decode('utf-8'))
       if not self.dry_run:
         self.fs.unlink(self.name)
     return False
@@ -538,7 +538,7 @@ class FileSyncer(object):
         else:
           for name, s in reversed(self.dst_only[i]):
             dst_name = self.dst[i] + name
-            logging.info('%s-Delete: %r', self.push[i], dst_name)
+            logging.info('%s-Delete: %r', self.push[i], dst_name.decode('utf-8'))
             if stat.S_ISDIR(s.st_mode):
               if not self.dry_run:
                 self.dst_fs[i].rmdir(dst_name)
@@ -574,7 +574,7 @@ class FileSyncer(object):
           # same time stamp
           continue
       if l2r and r2l:
-        logging.warning('Unresolvable: %r', name)
+        logging.warning('Unresolvable: %r', name.decode('utf-8'))
         continue
       if l2r:
         i = 0  # Local to remote operation.
@@ -585,7 +585,7 @@ class FileSyncer(object):
         src_stat = remotestat
         dst_stat = localstat
       dst_name = self.dst[i] + name
-      logging.info('%s-Delete-Conflicting: %r', self.push[i], dst_name)
+      logging.info('%s-Delete-Conflicting: %r', self.push[i], dst_name.decode('utf-8'))
       if stat.S_ISDIR(localstat.st_mode) or stat.S_ISDIR(remotestat.st_mode):
         if not self.allow_replace:
           logging.info('Would have to replace to do this. '
@@ -628,7 +628,7 @@ class FileSyncer(object):
         for name, s in self.src_only[i]:
           src_name = self.src[i] + name
           dst_name = self.dst[i] + name
-          logging.info('%s: %r', self.push[i], dst_name)
+          logging.info('%s: %r', self.push[i], dst_name.decode('utf-8'))
           if stat.S_ISDIR(s.st_mode):
             if not self.dry_run:
               self.dst_fs[i].makedirs(dst_name)
@@ -863,7 +863,7 @@ def main() -> None:
       return
 
   for i in range(len(localpaths)):
-    logging.info('Sync: local %r, remote %r', localpaths[i], remotepaths[i])
+    logging.info('Sync: local %r, remote %r', localpaths[i].decode('utf-8'), remotepaths[i].decode('utf-8'))
     syncer = FileSyncer(adb, localpaths[i], remotepaths[i], local_to_remote,
                         remote_to_local, preserve_times, delete_missing,
                         allow_overwrite, allow_replace, copy_links, dry_run)
