@@ -24,6 +24,7 @@ import re
 import stat
 import subprocess
 import time
+import calendar
 from types import TracebackType
 from typing import Callable, cast, Dict, List, IO, Iterable, Optional, Tuple, Type
 
@@ -177,7 +178,7 @@ class AdbFileSystem(GlobLike, OSLike):
       st_mode |= stat.S_IFSOCK
     st_size = None if groups['st_size'] is None else int(groups['st_size'])
     st_mtime = int(
-        time.mktime(
+        calendar.timegm(
             time.strptime(
                 match.group('st_mtime').decode('ascii'), '%Y-%m-%d %H:%M')))
 
@@ -231,7 +232,7 @@ class AdbFileSystem(GlobLike, OSLike):
     """List the contents of a directory, caching them for later lstat calls."""
     with Stdout(self.adb +
                 [b'shell',
-                 b'ls -al %s' % (self.QuoteArgument(path + b'/'),)]) as stdout:
+                 b'TZ=utc ls -al %s' % (self.QuoteArgument(path + b'/'),)]) as stdout:
       for line in stdout:
         if line.startswith(b'total '):
           continue
@@ -252,7 +253,7 @@ class AdbFileSystem(GlobLike, OSLike):
       return self.stat_cache[path]
     with Stdout(
         self.adb +
-        [b'shell', b'ls -ald %s' % (self.QuoteArgument(path),)]) as stdout:
+        [b'shell', b'TZ=utc ls -ald %s' % (self.QuoteArgument(path),)]) as stdout:
       for line in stdout:
         if line.startswith(b'total '):
           continue
@@ -269,7 +270,7 @@ class AdbFileSystem(GlobLike, OSLike):
       return self.stat_cache[path]
     with Stdout(
         self.adb +
-        [b'shell', b'ls -aldL %s' % (self.QuoteArgument(path),)]) as stdout:
+        [b'shell', b'TZ=utc ls -aldL %s' % (self.QuoteArgument(path),)]) as stdout:
       for line in stdout:
         if line.startswith(b'total '):
           continue
@@ -308,14 +309,14 @@ class AdbFileSystem(GlobLike, OSLike):
     if subprocess.call(
         self.adb +
         [b'shell',
-         b'touch -mt %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
+         b'TZ=utc touch -mt %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
     timestr = time.strftime('%Y%m%d%H%M.%S',
                             time.gmtime(atime)).encode('ascii')
     if subprocess.call(
         self.adb +
         [b'shell',
-         b'touch -at %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
+         b'TZ=utc touch -at %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
 
   def glob(self, path: bytes) -> Iterable[bytes]:  # glob's name, so pylint: disable=g-bad-name
@@ -639,9 +640,9 @@ class FileSyncer(object):
                 self.num_bytes += s.st_size
           if not self.dry_run:
             if self.preserve_times:
-              logging.info('%s-Times: accessed %s, modified %s', self.push[i],
-                           time.asctime(time.localtime(s.st_atime)),
-                           time.asctime(time.localtime(s.st_mtime)))
+              logging.info('%s-Times: accessed %s UTC, modified %s UTC', self.push[i],
+                           time.asctime(time.gmtime(s.st_atime)),
+                           time.asctime(time.gmtime(s.st_mtime)))
               self.dst_fs[i].utime(dst_name, (s.st_atime, s.st_mtime))
 
   def TimeReport(self) -> None:
