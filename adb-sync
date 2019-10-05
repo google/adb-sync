@@ -304,14 +304,14 @@ class AdbFileSystem(GlobLike, OSLike):
     """Set the time of a file to a specified unix time."""
     atime, mtime = times
     timestr = time.strftime('%Y%m%d%H%M.%S',
-                            time.localtime(mtime)).encode('ascii')
+                            time.gmtime(mtime)).encode('ascii')
     if subprocess.call(
         self.adb +
         [b'shell',
          b'touch -mt %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
     timestr = time.strftime('%Y%m%d%H%M.%S',
-                            time.localtime(atime)).encode('ascii')
+                            time.gmtime(atime)).encode('ascii')
     if subprocess.call(
         self.adb +
         [b'shell',
