@@ -567,8 +567,14 @@ class FileSyncer(object):
         localminute = int(localstat.st_mtime / 60)
         remoteminute = int(remotestat.st_mtime / 60)
         if localminute > remoteminute:
+          if localstat.st_size == remotestat.st_size and localstat.st_mtime == localstat.st_atime:
+            # files have same size and the more recent file has not been modified since creation
+            continue
           r2l = False
         elif localminute < remoteminute:
+          if localstat.st_size == remotestat.st_size and remotestat.st_mtime == remotestat.st_atime:
+            # files have same size and the more recent file has not been modified since creation
+            continue
           l2r = False
         else:
           # same time stamp
@@ -643,7 +649,10 @@ class FileSyncer(object):
               logging.info('%s-Times: accessed %s UTC, modified %s UTC', self.push[i],
                            time.asctime(time.gmtime(s.st_atime)),
                            time.asctime(time.gmtime(s.st_mtime)))
-              self.dst_fs[i].utime(dst_name, (s.st_atime, s.st_mtime))
+              try:
+                self.dst_fs[i].utime(dst_name, (s.st_atime, s.st_mtime))
+              except Exception:
+                logging.warning('Unable to set times')
 
   def TimeReport(self) -> None:
     """Report time and amount of data transferred."""
