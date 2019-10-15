@@ -566,12 +566,6 @@ class FileSyncer(object):
       if localstat.st_size == remotestat.st_size:
         if localminute == remoteminute:
           continue
-        if localminute > remoteminute and localstat.st_mtime == localstat.st_atime:
-          # files have same size and the more recent file has not been modified since creation
-          continue
-        if localminute < remoteminute and remotestat.st_mtime == remotestat.st_atime:
-          # files have same size and the more recent file has not been modified since creation
-          continue
       l2r = self.local_to_remote
       r2l = self.remote_to_local
       if l2r and r2l:
