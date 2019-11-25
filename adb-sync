@@ -374,7 +374,7 @@ def BuildFileList(fs: OSLike, path: bytes, follow_links: bool,
   elif stat.S_ISREG(statresult.st_mode):
     yield prefix, statresult
   elif stat.S_ISLNK(statresult.st_mode) and not follow_links:
-    yield prefix, statresult
+    pass # ignore links completely
   else:
     logging.info('Unsupported file: %r.', path.decode('utf-8'))
 
