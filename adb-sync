@@ -585,6 +585,9 @@ class FileSyncer(object):
         src_stat = remotestat
         dst_stat = localstat
       dst_name = self.dst[i] + name
+      if r2l and self.copy_links:
+        # use true destination if we allow copy links (only for local)
+        dst_name = os.path.realpath(dst_name)
       logging.info('%s-Delete-Conflicting: %r', self.push[i], dst_name.decode('utf-8'))
       if stat.S_ISDIR(localstat.st_mode) or stat.S_ISDIR(remotestat.st_mode):
         if not self.allow_replace:
@@ -628,6 +631,9 @@ class FileSyncer(object):
         for name, s in self.src_only[i]:
           src_name = self.src[i] + name
           dst_name = self.dst[i] + name
+          if i == 1 and self.copy_links:
+            # use true destination if we allow copy links (only for local)
+            dst_name = os.path.realpath(dst_name)
           logging.info('%s: %r', self.push[i], dst_name.decode('utf-8'))
           if stat.S_ISDIR(s.st_mode):
             if not self.dry_run:
