@@ -24,6 +24,7 @@ import re
 import stat
 import subprocess
 import time
+import glob
 from types import TracebackType
 from typing import Callable, cast, Dict, List, IO, Iterable, Optional, Tuple, Type
 
@@ -337,7 +338,7 @@ class AdbFileSystem(GlobLike, OSLike):
 
 
 def BuildFileList(fs: OSLike, path: bytes, follow_links: bool,
-                  prefix: bytes) -> Iterable[Tuple[bytes, os.stat_result]]:
+                  prefix: bytes, excludes: dict) -> Iterable[Tuple[bytes, os.stat_result]]:
   """Builds a file list.
 
   Args:
@@ -364,12 +365,19 @@ def BuildFileList(fs: OSLike, path: bytes, follow_links: bool,
       files = fs.listdir(path)
     except OSError:
       return
+    if isinstance(fs, AdbFileSystem):
+      for x in excludes['p']:
+        excludes['x'].extend(fs.glob(path + b'/' + x.encode()))
     for n in files:
       if n == b'.' or n == b'..':
         continue
+      if ((path + b'/' + n) in excludes['x']) or (n.decode() in excludes['x']):
+        logging.info('Excluding %s.', path.decode() + '/' + n.decode())
+        continue
       for t in BuildFileList(fs, path + b'/' + n, follow_links,
-                             prefix + b'/' + n):
-        yield t
+                             prefix + b'/' + n, excludes):
+        if t not in excludes['x']:
+          yield t
   elif stat.S_ISREG(statresult.st_mode):
     yield prefix, statresult
   elif stat.S_ISLNK(statresult.st_mode) and not follow_links:
@@ -473,7 +481,7 @@ class FileSyncer(object):
                local_to_remote: bool, remote_to_local: bool,
                preserve_times: bool, delete_missing: bool,
                allow_overwrite: bool, allow_replace: bool, copy_links: bool,
-               dry_run: bool) -> None:
+               dry_run: bool, excludes: dict) -> None:
     self.local = local_path
     self.remote = remote_path
     self.adb = adb
@@ -485,6 +493,7 @@ class FileSyncer(object):
     self.allow_replace = allow_replace
     self.copy_links = copy_links
     self.dry_run = dry_run
+    self.excludes = excludes
     self.num_bytes = 0
     self.start_time = time.time()
 
@@ -510,8 +519,9 @@ class FileSyncer(object):
     """Scans the local and remote locations and identifies differences."""
     logging.info('Scanning and diffing...')
     locallist = BuildFileList(
-        cast(OSLike, os), self.local, self.copy_links, b'')
-    remotelist = BuildFileList(self.adb, self.remote, self.copy_links, b'')
+        cast(OSLike, os), self.local, self.copy_links, b'', self.excludes)
+    remotelist = BuildFileList(
+        self.adb, self.remote, self.copy_links, b'', self.excludes)
     self.local_only, self.both, self.remote_only = DiffLists(
         locallist, remotelist)
     if not self.local_only and not self.both and not self.remote_only:
@@ -796,6 +806,13 @@ def main() -> None:
       '--dry-run',
       action='store_true',
       help='Do not do anything - just show what would be done.')
+  parser.add_argument(
+      '-x',
+      '--exclude',
+      metavar='EXCLUDE',
+      type=str,
+      help='Exclude files from sync.')
+
   args = parser.parse_args()
 
   localpatterns = [os.fsencode(x) for x in args.source]
@@ -834,6 +851,7 @@ def main() -> None:
   allow_overwrite = not args.no_clobber
   copy_links = args.copy_links
   dry_run = args.dry_run
+  excludes = {'p': args.exclude.split(','), 'x': []}
   local_to_remote = True
   remote_to_local = False
   if args.two_way:
@@ -866,7 +884,8 @@ def main() -> None:
     logging.info('Sync: local %r, remote %r', localpaths[i], remotepaths[i])
     syncer = FileSyncer(adb, localpaths[i], remotepaths[i], local_to_remote,
                         remote_to_local, preserve_times, delete_missing,
-                        allow_overwrite, allow_replace, copy_links, dry_run)
+                        allow_overwrite, allow_replace, copy_links, dry_run,
+                        excludes)
     if not syncer.IsWorking():
       logging.error('Device not connected or not working.')
       return
