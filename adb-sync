@@ -300,17 +300,16 @@ class AdbFileSystem(GlobLike, OSLike):
       raise OSError('mkdir failed')
 
   def utime(self, path: bytes, times: Tuple[float, float]) -> None:
-    # TODO(rpolzer): Find out why this does not work (returns status 255).
     """Set the time of a file to a specified unix time."""
     atime, mtime = times
-    timestr = time.strftime('%Y%m%d.%H%M%S',
+    timestr = time.strftime('%Y%m%d%H%M.%S',
                             time.localtime(mtime)).encode('ascii')
     if subprocess.call(
         self.adb +
         [b'shell',
          b'touch -mt %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
-    timestr = time.strftime('%Y%m%d.%H%M%S',
+    timestr = time.strftime('%Y%m%d%H%M.%S',
                             time.localtime(atime)).encode('ascii')
     if subprocess.call(
         self.adb +
