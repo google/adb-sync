@@ -2,6 +2,8 @@
 
 """Nice logging, with colours on Linux. 'setupRootLogger' makes argparse integration trivial."""
 
+__version__ = "1.0.3"
+
 import argparse
 import logging
 from sys import platform
@@ -62,15 +64,17 @@ def criticalLogExit(message):
     logging.critical("Exiting")
     raise SystemExit
 
-def logTree(title, tree, finals = None, logLeaves = True, loggingLevel = logging.INFO):
-    """Log a dictionary as a tree"""
+def logTree(title, tree, finals = None, logLeavesTypes = True, loggingLevel = logging.INFO):
+    """Log a dictionary as a tree.
+    logLeavesTypes can be False to log no leaves, True to log all leaves, or a tuple of types for which to log."""
     if finals is None:
         finals = []
     if not isinstance(tree, dict):
         logging.log(msg = "{}{}{}".format(
             "".join([" " if final else "│" for final in finals[:-1]] +
             ["└" if final else "├" for final in finals[-1:]]),
-            title, ": {}".format(tree) if logLeaves else ""), level = loggingLevel)
+            title, ": {}".format(tree) if logLeavesTypes is not False and (logLeavesTypes is True or isinstance(tree, logLeavesTypes)) else ""),
+            level = loggingLevel)
     else:
         logging.log(msg = "{}{}".format(
             "".join([" " if final else "│" for final in finals[:-1]] +
@@ -78,14 +82,18 @@ def logTree(title, tree, finals = None, logLeaves = True, loggingLevel = logging
             title), level = loggingLevel)
         tree_items = list(tree.items())
         for key, value in tree_items[:-1]:
-            logTree(key, value, finals = finals + [False], logLeaves = logLeaves, loggingLevel = loggingLevel)
+            logTree(key, value, finals = finals + [False], logLeavesTypes = logLeavesTypes, loggingLevel = loggingLevel)
         for key, value in tree_items[-1:]:
-            logTree(key, value, finals = finals + [True], logLeaves = logLeaves, loggingLevel = loggingLevel)
+            logTree(key, value, finals = finals + [True], logLeavesTypes = logLeavesTypes, loggingLevel = loggingLevel)
 
-def getParser(docstring, *args, **kwargs):
+def getParser(docstring, *args, version = None, **kwargs):
     """Basic argument parser with verbosity arguments already added. Supply __doc__ as docstring for the description argument of the parser."""
     # we use this function instead of inheriting ArgumentParser lest subparsers also have verbosity options...
     parser = argparse.ArgumentParser(description = docstring, *args, **kwargs)
+    if version is not None:
+        parser.add_argument("--version",
+            action = "version",
+            version = version)
     parser_group_verbosity = parser.add_argument_group("logging").add_mutually_exclusive_group(required = False)
     parser_group_verbosity.add_argument("-v", "--verbose",
         help = "Increase logging verbosity: -v for debug",
@@ -99,7 +107,7 @@ def getParser(docstring, *args, **kwargs):
     return parser
 
 if __name__ == "__main__":
-    parser = getParser(__doc__)
+    parser = getParser(__doc__, version = __version__)
 
     args = parser.parse_args()
 

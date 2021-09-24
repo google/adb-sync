@@ -2,7 +2,8 @@
 
 """Simpler version of adb-sync for Python3"""
 
-import argparse
+__version__ = "1.0.9"
+
 import logging
 from typing import Iterator, List, Tuple, Union, Iterable
 import os
@@ -12,7 +13,7 @@ import subprocess
 import datetime
 import fnmatch
 
-from SAOLogging import setupRootLogger, criticalLogExit, logTree
+from SAOLogging import getParser, setupRootLogger, criticalLogExit, logTree
 
 class FileSystem():
     RE_ADB_FILE_PUSHED = re.compile("^.*: 1 file pushed, 0 skipped\\..*$")
@@ -612,17 +613,7 @@ class FileSyncer():
             return returnDict or None
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description = __doc__)
-    parser_group_verbosity = parser.add_argument_group("logging").add_mutually_exclusive_group(required = False)
-
-    parser_group_verbosity.add_argument("-v", "--verbose",
-        help = "Increase logging verbosity: -v for debug",
-        action = "count",
-        default = 0)
-    parser_group_verbosity.add_argument("-q", "--quiet",
-        help = "Decrease logging verbosity: -q for warning, -qq for error, -qqq for critical, -qqqq for no messages",
-        action = "count",
-        default = 0)
+    parser = getParser(__doc__, version = __version__)
 
     parser.add_argument("LOCAL",
         help = "Local path",
@@ -661,6 +652,7 @@ if __name__ == "__main__":
         default = False)
 
     args = parser.parse_args()
+
     setupRootLogger(args.verbose, args.quiet, messagefmt = "[%(levelname)s] %(message)s")
 
     if args.LOCAL[-1] in ["/", "\\"] or args.ANDROID[-1] in ["/", "\\"]:
@@ -755,27 +747,27 @@ if __name__ == "__main__":
 
     logging.info("Delete tree:")
     if tree_delete is not None:
-        logTree(path_destination, tree_delete, logLeaves = False)
+        logTree(path_destination, tree_delete, logLeavesTypes = False)
     logging.info("")
 
     logging.info("Copy tree:")
     if tree_copy is not None:
-        logTree("{} --> {}".format(path_source, path_destination), tree_copy, logLeaves = False)
+        logTree("{} --> {}".format(path_source, path_destination), tree_copy, logLeavesTypes = False)
     logging.info("")
 
     logging.info("Source exluded tree:")
     if tree_excluded_source is not None:
-        logTree(path_source, tree_excluded_source, logLeaves = False)
+        logTree(path_source, tree_excluded_source, logLeavesTypes = False)
     logging.info("")
 
     logging.info("Destination unaccounted tree:")
     if tree_unaccounted_destination is not None:
-        logTree(path_destination, tree_unaccounted_destination, logLeaves = False)
+        logTree(path_destination, tree_unaccounted_destination, logLeavesTypes = False)
     logging.info("")
 
     logging.info("Destination excluded tree:")
     if tree_excluded_destination is not None:
-        logTree(path_destination, tree_excluded_destination, logLeaves = False)
+        logTree(path_destination, tree_excluded_destination, logLeavesTypes = False)
     logging.info("")
 
 
@@ -791,7 +783,7 @@ if __name__ == "__main__":
 
     logging.info("Non-excluded-supporting destination unaccounted tree:")
     if tree_unaccounted_destination_non_excluded is not None:
-        logTree(path_destination, tree_unaccounted_destination_non_excluded, logLeaves = False)
+        logTree(path_destination, tree_unaccounted_destination_non_excluded, logLeavesTypes = False)
     logging.info("")
 
     logging.info("SYNCING")
