@@ -33,7 +33,6 @@ I am satisfied with my code so far, however a few things could be added if they 
 
 ### New
 
-- `-L` to follow symlinks
 - `--backup` and `--backup-dir-local` or `--backup-dir-android` to move outdated / to-delete files to another folder instead of deleting
 
 Perhaps working with other people's repos could build a once-and-for-all adbsync?

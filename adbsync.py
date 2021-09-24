@@ -2,7 +2,7 @@
 
 """Simpler version of adb-sync for Python3"""
 
-__version__ = "1.0.9"
+__version__ = "1.1.0"
 
 import logging
 from typing import Iterator, List, Tuple, Union, Iterable
@@ -25,7 +25,7 @@ class FileSystem():
             ["adb", "shell"] + commands,
             stdout = subprocess.PIPE, stderr = subprocess.STDOUT
         ) as proc:
-            while adbLine := proc.stdout.readline().decode().rstrip():
+            while adbLine := proc.stdout.readline().decode().rstrip("\r\n"):
                 yield adbLine
 
     def unlink(self, path: str) -> None:
@@ -37,10 +37,10 @@ class FileSystem():
     def makedirs(self, path: str) -> None:
         raise NotImplementedError
 
-    def lstat(self, path: str) -> os.stat_result:
+    def realPath(self, path: str) -> str:
         raise NotImplementedError
 
-    def stat(self, path: str) -> os.stat_result:
+    def lstat(self, path: str) -> os.stat_result:
         raise NotImplementedError
 
     def lstat_inDir(self, path: str) -> Iterable[Tuple[str, os.stat_result]]:
@@ -63,14 +63,21 @@ class FileSystem():
     def _getFilesTree(self, tree_root: str, tree_root_stat: os.stat_result, followLinks: bool = False):
         # the reason to have two functions instead of one purely recursive one is to use self.lstat_inDir ie ls
         # which is much faster than individually stat-ing each file. Hence we have getFilesTree's special first lstat
-        if followLinks:
-            raise NotImplementedError
-
         if stat.S_ISLNK(tree_root_stat.st_mode):
-            logging.warning("Ignoring symlink encountered at '{}'".format(self.joinPaths(tree_root, tree_root)))
-            return None
-            # logging.error("Symlink encountered at '{}'".format(self.joinPaths(tree_root, tree_root)))
-            # raise NotImplementedError
+            if not followLinks:
+                logging.warning("Ignoring symlink '{}'".format(tree_root))
+                return None
+            logging.debug("Following symlink '{}'".format(tree_root))
+            try:
+                tree_root_realPath = self.realPath(tree_root)
+                tree_root_stat_realPath = self.lstat(tree_root_realPath)
+            except FileNotFoundError:
+                logging.error("Skipping dead symlink '{}'".format(tree_root))
+                return None
+            except NotADirectoryError:
+                logging.error("Skipping not-a-directory symlink '{}'".format(tree_root))
+                return None
+            return self._getFilesTree(tree_root_realPath, tree_root_stat_realPath, followLinks = followLinks)
         elif stat.S_ISDIR(tree_root_stat.st_mode):
             tree = {".": (60 * (int(tree_root_stat.st_atime) // 60), 60 * (int(tree_root_stat.st_mtime) // 60))}
             for filename, statObject_child, in self.lstat_inDir(tree_root):
@@ -150,11 +157,11 @@ class LocalFileSystem(FileSystem):
     def makedirs(self, path: str) -> None:
         os.makedirs(path, exist_ok = True)
 
+    def realPath(self, path: str) -> str:
+        return os.path.realpath(path)
+
     def lstat(self, path: str) -> os.stat_result:
         return os.lstat(path)
-
-    def stat(self, path: str) -> os.stat_result:
-        return os.stat(path)
 
     def lstat_inDir(self, path: str) -> Iterable[Tuple[str, os.stat_result]]:
         for filename in os.listdir(path):
@@ -176,7 +183,7 @@ class LocalFileSystem(FileSystem):
             ["adb", "pull", source, destination],
             stdout = subprocess.PIPE, stderr = subprocess.STDOUT
         ) as proc:
-            while adbLine := proc.stdout.readline().decode().rstrip():
+            while adbLine := proc.stdout.readline().decode().rstrip("\r\n"):
                 if not self.RE_ADB_FILE_PULLED.fullmatch(adbLine):
                     criticalLogExit("Line not captured: '{}'".format(adbLine))
 
@@ -210,9 +217,8 @@ class AndroidFileSystem(FileSystem):
         (?(S_IFBLK) [^ ]+[ ]+[^ ]+[ ]+) # Device numbers
         (?(S_IFCHR) [^ ]+[ ]+[^ ]+[ ]+) # Device numbers
         (?(S_IFDIR) (?P<dirsize>[0-9]+ [ ]+))? # Directory size
-        (?(S_IFREG)
-        (?P<st_size> [0-9]+) # Size
-        [ ]+)
+        (?(S_IFREG) (?P<st_size> [0-9]+) [ ]+) # Size
+        (?(S_IFLNK) ([0-9]+) [ ]+) # Link length
         (?P<st_mtime>
         [0-9]{4}-[0-9]{2}-[0-9]{2} # Date
         [ ]
@@ -226,15 +232,8 @@ class AndroidFileSystem(FileSystem):
     RE_LS_NOT_A_DIRECTORY = re.compile("ls: .*: Not a directory$")
     RE_TOTAL = re.compile("^total \\d+$")
 
-    # RE_STAT_NE = re.compile("^stat: '.*': No such file or directory$")
-    RE_STAT = re.compile(
-        r"""^
-        (?P<st_mtime> [0-9]+)[ ]
-        (?:
-        (?P<S_IFREG>regular[ ]file|regular[ ]empty[ ]file) |
-        (?P<S_IFDIR>directory)|
-        (?P<S_IFLNK>symbolic[ ]link))
-        $""", re.DOTALL | re.VERBOSE)
+    RE_REALPATH_NO_SUCH_FILE = re.compile("^realpath: .*: No such file or directory$")
+    RE_REALPATH_NOT_A_DIRECTORY = re.compile("^realpath: .*: Not a directory$")
 
     escapePathReplacements = [
         [" ", "\\ "],
@@ -260,20 +259,18 @@ class AndroidFileSystem(FileSystem):
             if line:
                 criticalLogExit("Line not captured: '{}'".format(line))
 
+    def realPath(self, path: str) -> str:
+        for line in self.adbShell(["realpath", self.escapePath(path)]):
+            if self.RE_REALPATH_NO_SUCH_FILE.fullmatch(line):
+                raise FileNotFoundError
+            elif self.RE_REALPATH_NOT_A_DIRECTORY.fullmatch(line):
+                raise NotADirectoryError
+            else:
+                return line
+
     def lstat(self, path: str) -> os.stat_result:
         for line in self.adbShell(["ls -lad", self.escapePath(path)]):
             return self.lsToStat(line)[1]
-
-    def stat(self, path: str) -> os.stat_result:
-        for line in self.adbShell(["ls -lad", self.escapePath(path)]):
-            return self.lsToStat(line)[1]
-        # for line in self.adbShell(["stat", "-c", "%Y\\ %F", self.escapePath(path)]):
-        #     if self.RE_NO_SUCH_FILE.fullmatch(line):
-        #         raise FileNotFoundError
-        #     elif match := self.RE_STAT.fullmatch(line):
-        #         return match.groupdict()
-        #     else:
-        #         criticalLogExit("Line not captured: '{}'".format(line))
 
     def lstat_inDir(self, path: str) -> Iterable[Tuple[str, os.stat_result]]:
         for line in self.adbShell(["ls", "-la", self.escapePath(path)]):
@@ -301,7 +298,7 @@ class AndroidFileSystem(FileSystem):
             ["adb", "push", source, destination],
             stdout = subprocess.PIPE, stderr = subprocess.STDOUT
         ) as proc:
-            while adbLine := proc.stdout.readline().decode().rstrip():
+            while adbLine := proc.stdout.readline().decode().rstrip("\r\n"):
                 if not self.RE_ADB_FILE_PUSHED.fullmatch(adbLine):
                     criticalLogExit("Line not captured: '{}'".format(adbLine))
 
@@ -621,8 +618,12 @@ if __name__ == "__main__":
     parser.add_argument("ANDROID",
         help = "Android path",
         action = "store")
-    parser.add_argument("--dry-run",
+    parser.add_argument("-n", "--dry-run",
         help = "Perform a dry run; do not actually copy and delete etc",
+        action = "store_true",
+        default = False)
+    parser.add_argument("-L", "--copy-links",
+        help = "Follow symlinks and copy their referent file / directory",
         action = "store_true",
         default = False)
     parser.add_argument("--exclude",
@@ -689,7 +690,7 @@ if __name__ == "__main__":
         criticalLogExit("No device detected")
 
     try:
-        filesTree_source = fs_source.getFilesTree(path_source)
+        filesTree_source = fs_source.getFilesTree(path_source, followLinks = args.copy_links)
     except FileNotFoundError:
         criticalLogExit("Source '{}' not found".format(path_source))
     except NotADirectoryError:
@@ -698,7 +699,7 @@ if __name__ == "__main__":
         criticalLogExit("Permission error stat-ing '{}'".format(path_source))
 
     try:
-        filesTree_destination = fs_destination.getFilesTree(path_destination)
+        filesTree_destination = fs_destination.getFilesTree(path_destination, followLinks = args.copy_links)
     except FileNotFoundError:
         filesTree_destination = None
     except NotADirectoryError:
