@@ -1,4 +1,4 @@
-# Simple ADB Sync
+# Better ADB Sync
 
 This is a (pretty much from scratch) rewrite of Google's [adbsync](https://github.com/google/adb-sync) repo.
 
