@@ -22,20 +22,7 @@ This script does not treat a trailing slash on the source side's filepath specia
 
 I am satisfied with my code so far, however a few things could be added if they are ever needed
 
-### Removed from original code; 'just works' with one adb install and connected device
-
-- `-e` for selecting the adb binary
-- `--device` to select the USB device to act on
-- `--emulator` ...
-- `--serial` ...
-- `-H` ...
-- `-P` ...
-
-### New
-
 - `--backup` and `--backup-dir-local` or `--backup-dir-android` to move outdated / to-delete files to another folder instead of deleting
-
-Perhaps working with other people's repos could build a once-and-for-all adbsync?
 
 ---
 

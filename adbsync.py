@@ -2,7 +2,7 @@
 
 """Simpler version of adb-sync for Python3"""
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 import logging
 from typing import Iterator, List, Tuple, Union, Iterable
@@ -19,10 +19,12 @@ class FileSystem():
     RE_ADB_FILE_PUSHED = re.compile("^.*: 1 file pushed, 0 skipped\\..*$")
     RE_ADB_FILE_PULLED = re.compile("^.*: 1 file pulled, 0 skipped\\..*$")
 
-    @staticmethod
-    def adbShell(commands: List[str]) -> Iterator[str]:
+    def __init__(self, adb_arguments: List[str]) -> None:
+        self.adb_arguments = adb_arguments
+
+    def adbShell(self, commands: List[str]) -> Iterator[str]:
         with subprocess.Popen(
-            ["adb", "shell"] + commands,
+            self.adb_arguments + ["shell"] + commands,
             stdout = subprocess.PIPE, stderr = subprocess.STDOUT
         ) as proc:
             while adbLine := proc.stdout.readline().decode().rstrip("\r\n"):
@@ -180,7 +182,7 @@ class LocalFileSystem(FileSystem):
 
     def pushFileHere(self, source: str, destination: str) -> None:
         with subprocess.Popen(
-            ["adb", "pull", source, destination],
+            self.adb_arguments + ["pull", source, destination],
             stdout = subprocess.PIPE, stderr = subprocess.STDOUT
         ) as proc:
             while adbLine := proc.stdout.readline().decode().rstrip("\r\n"):
@@ -295,7 +297,7 @@ class AndroidFileSystem(FileSystem):
 
     def pushFileHere(self, source: str, destination: str) -> None:
         with subprocess.Popen(
-            ["adb", "push", source, destination],
+            self.adb_arguments + ["push", source, destination],
             stdout = subprocess.PIPE, stderr = subprocess.STDOUT
         ) as proc:
             while adbLine := proc.stdout.readline().decode().rstrip("\r\n"):
@@ -652,6 +654,25 @@ if __name__ == "__main__":
         action = "store_true",
         default = False)
 
+    parser_group_adb = parser.add_argument_group("ADB arguments",
+        description = "By default ADB works for me without touching any of these, but if you have any specific "
+        "demands then go ahead. See 'adb --help' for a full list of adb flags and options")
+    parser_group_adb.add_argument("--adb-bin",
+        help = "Use the given adb binary. Defaults to 'adb' ie whatever is on path",
+        default = "adb")
+    parser_group_adb.add_argument("--adb-flag",
+        help = "Add a flag to call adb with, eg '--adb-flag d' for adb -d, that is return an error if more than one device is connected",
+        action = "append",
+        dest = "adb_flags",
+        default = [])
+    parser_group_adb.add_argument("--adb-option",
+        help = "Add an option to call adb with, eg '--adb-option P 5037' for adb -P 5037, that is use port 5037 for the adb server",
+        metavar = ("OPTION", "VALUE"),
+        nargs = 2,
+        action = "append",
+        dest = "adb_options",
+        default = [])
+
     args = parser.parse_args()
 
     setupRootLogger(args.verbose, args.quiet, messagefmt = "[%(levelname)s] %(message)s")
@@ -668,8 +689,13 @@ if __name__ == "__main__":
         except (FileNotFoundError, PermissionError):
             criticalLogExit("Could not open exclude-from file '{}'".format(exclude_from_filename))
 
-    fs_android = AndroidFileSystem()
-    fs_local = LocalFileSystem()
+    adb_arguments = [args.adb_bin] + ["-{}".format(arg) for arg in args.adb_flags]
+    for option, value in args.adb_options:
+        adb_arguments.append("-{}".format(option))
+        adb_arguments.append(value)
+
+    fs_android = AndroidFileSystem(adb_arguments)
+    fs_local = LocalFileSystem(adb_arguments)
 
     args.LOCAL = os.path.expanduser(args.LOCAL)
     if args.pull:
