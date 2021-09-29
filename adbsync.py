@@ -2,7 +2,7 @@
 
 """Better version of adb-sync for Python3"""
 
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 
 import logging
 from typing import Iterator, List, Tuple, Union, Iterable
@@ -591,14 +591,18 @@ class FileSyncer():
         # 1) unaccounted is a tuple (file) and excluded is None
         # 2) unaccounted is a dict and excluded is a dict or None
         # trees passed to this function are already pruned; empty dictionary (sub)trees don't exist
-        if excluded is not None:
-            unaccounted.pop(".", None)
+        if excluded is None:
+            return unaccounted
+        else:
+            unaccounted_non_excluded = {}
             for unaccounted_key, unaccounted_value in unaccounted.items():
-                unaccounted[unaccounted_key] = cls.removeExludedFoldersFromUnaccountedTree(
+                if unaccounted_key == ".":
+                    continue
+                unaccounted_non_excluded[unaccounted_key] = cls.removeExludedFoldersFromUnaccountedTree(
                     unaccounted_value,
                     excluded.get(unaccounted_key, None)
                 )
-        return unaccounted
+            return unaccounted_non_excluded
 
     @classmethod
     def pruneTree(cls, tree):
