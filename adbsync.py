@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-"""Simpler version of adb-sync for Python3"""
+"""Better version of adb-sync for Python3"""
 
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 
 import logging
 from typing import Iterator, List, Tuple, Union, Iterable
@@ -585,10 +585,12 @@ class FileSyncer():
         return delete, copy, excluded_source, unaccounted_destination, excluded_destination
 
     @classmethod
-    def removeExludedFoldersFromUnaccountedTree(cls, unaccounted: dict, excluded: Union[dict, None]) -> dict:
-        # for when we have --del but not --delete-excluded selected; we do not want to remove
-        # unaccounted folders that are the parent of excluded items; we return the tree that
-        # is to be merged with tree_delete for deletion
+    def removeExludedFoldersFromUnaccountedTree(cls, unaccounted: Union[dict, Tuple[int, int]], excluded: Union[dict, None]) -> dict:
+        # For when we have --del but not --delete-excluded selected; we do not want to delete unaccounted folders that are the
+        # parent of excluded items. At the point in the program that this function is called at either
+        # 1) unaccounted is a tuple (file) and excluded is None
+        # 2) unaccounted is a dict and excluded is a dict or None
+        # trees passed to this function are already pruned; empty dictionary (sub)trees don't exist
         if excluded is not None:
             unaccounted.pop(".", None)
             for unaccounted_key, unaccounted_value in unaccounted.items():
@@ -599,7 +601,7 @@ class FileSyncer():
         return unaccounted
 
     @classmethod
-    def pruneTree(cls, tree: Union[None, bool, dict]) -> Union[None, bool, dict]:
+    def pruneTree(cls, tree):
         """Remove all Nones from a tree. May return None if tree is None however."""
         if not isinstance(tree, dict):
             return tree
@@ -662,6 +664,7 @@ if __name__ == "__main__":
         default = "adb")
     parser_group_adb.add_argument("--adb-flag",
         help = "Add a flag to call adb with, eg '--adb-flag d' for adb -d, that is return an error if more than one device is connected",
+        metavar = "ADB_FLAG",
         action = "append",
         dest = "adb_flags",
         default = [])
@@ -800,7 +803,6 @@ if __name__ == "__main__":
 
     tree_unaccounted_destination_non_excluded = None
     if tree_unaccounted_destination is not None:
-        # we know tree_unaccounted_destination is not a file as filesTree_source must exist
         tree_unaccounted_destination_non_excluded = FileSyncer.pruneTree(
             FileSyncer.removeExludedFoldersFromUnaccountedTree(
                 tree_unaccounted_destination,
