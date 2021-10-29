@@ -1,5 +1,7 @@
 # Better ADB Sync
 
+The main file to run is `./src/adbsync.py`
+
 This is a (pretty much from scratch) rewrite of Google's [adbsync](https://github.com/google/adb-sync) repo.
 
 The reason for the rewrite is to
