@@ -14,9 +14,9 @@ class ColoredFormatter(logging.Formatter):
     fg_brightRedBold = "\x1b[91;1m"
     reset            = "\x1b[0m"
 
-    def __init__(self, messagefmt, datefmt):
+    def __init__(self, fmt, datefmt):
         super().__init__()
-        self.messagefmt = messagefmt
+        self.messagefmt = fmt
         self.datefmt = datefmt
 
         self.formats = {
@@ -44,21 +44,24 @@ def setupRootLogger(
         verbosityLevel: int = 0,
         quietnessLevel: int = 0,
         messagefmt: str = "[%(asctime)s][%(levelname)s] %(message)s (%(filename)s:%(lineno)d)",
+        messagefmt_verbose: str = "[%(asctime)s][%(levelname)s] %(message)s (%(filename)s:%(lineno)d)",
         datefmt: str = "%Y-%m-%d %H:%M:%S"
     ):
+    messagefmt_toUse = messagefmt_verbose if verbosityLevel else messagefmt
     loggingLevel = 10 * (2 + quietnessLevel - verbosityLevel)
+    if not noColor and platform == "linux":
+        formatter_class = ColoredFormatter
+    else:
+        formatter_class = logging.Formatter
+
     rootLogger = logging.getLogger()
     rootLogger.setLevel(loggingLevel)
-
     consoleHandler = logging.StreamHandler()
-    if not noColor and platform == "linux":
-        consoleHandler.setFormatter(ColoredFormatter(messagefmt = messagefmt, datefmt = datefmt))
-    else:
-        consoleHandler.setFormatter(logging.Formatter(fmt = messagefmt, datefmt = datefmt))
+    consoleHandler.setFormatter(formatter_class(fmt = messagefmt_toUse, datefmt = datefmt))
     rootLogger.addHandler(consoleHandler)
 
-def criticalLogExit(message):
-    logging.critical(message)
+def criticalLogExit(message, logStackInfo: bool = True):
+    logging.critical(message, stack_info = logStackInfo)
     logging.critical("Exiting")
     raise SystemExit
 

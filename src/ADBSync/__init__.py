@@ -327,7 +327,7 @@ def main():
     except FileNotFoundError:
         criticalLogExit("Source '{}' not found".format(path_source))
     except NotADirectoryError:
-        criticalLogExit("Path '{}' contains a file as non-leaf segment; wrong path?".format(path_source))
+        criticalLogExit("Not a directory error for '{}'".format(path_source))
     except PermissionError:
         criticalLogExit("Permission error stat-ing '{}'".format(path_source))
 
@@ -336,7 +336,7 @@ def main():
     except FileNotFoundError:
         filesTree_destination = None
     except NotADirectoryError:
-        criticalLogExit("Path '{}' contains a file as non-leaf segment; would not be able to create directories".format(path_destination))
+        criticalLogExit("Not a directory error for '{}'".format(path_destination))
     except PermissionError:
         criticalLogExit("Permission error stat-ing '{}'".format(path_destination))
 
