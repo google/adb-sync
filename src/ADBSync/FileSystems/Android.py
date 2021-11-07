@@ -121,18 +121,15 @@ class AndroidFileSystem(FileSystem):
 
     def unlink(self, path: str) -> None:
         for line in self.adbShell(["rm", self.escapePath(path)]):
-            if line:
-                criticalLogExit("Line not captured: '{}'".format(line))
+            criticalLogExit("Line not captured: '{}'".format(line))
 
     def rmdir(self, path: str) -> None:
         for line in self.adbShell(["rm", "-r", self.escapePath(path)]):
-            if line:
-                criticalLogExit("Line not captured: '{}'".format(line))
+            criticalLogExit("Line not captured: '{}'".format(line))
 
     def makedirs(self, path: str) -> None:
         for line in self.adbShell(["mkdir", "-p", self.escapePath(path)]):
-            if line:
-                criticalLogExit("Line not captured: '{}'".format(line))
+            criticalLogExit("Line not captured: '{}'".format(line))
 
     def realPath(self, path: str) -> str:
         for line in self.adbShell(["realpath", self.escapePath(path)]):
@@ -142,6 +139,7 @@ class AndroidFileSystem(FileSystem):
                 raise NotADirectoryError
             else:
                 return line
+            # permission error possible?
 
     def lstat(self, path: str) -> os.stat_result:
         for line in self.adbShell(["ls", "-lad", self.escapePath(path)]):
@@ -171,6 +169,7 @@ class AndroidFileSystem(FileSystem):
             self.adb_arguments + ["push", source, destination],
             stdout = subprocess.PIPE, stderr = subprocess.STDOUT
         ) as proc:
-            while adbLine := proc.stdout.readline().decode().rstrip("\r\n"):
+            while adbLine := proc.stdout.readline():
+                adbLine = adbLine.decode().rstrip("\r\n")
                 if not self.RE_ADB_FILE_PUSHED.fullmatch(adbLine):
                     criticalLogExit("Line not captured: '{}'".format(adbLine))

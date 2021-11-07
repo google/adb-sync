@@ -15,7 +15,8 @@ class FileSystem():
             self.adb_arguments + ["shell"] + commands,
             stdout = subprocess.PIPE, stderr = subprocess.STDOUT
         ) as proc:
-            while adbLine := proc.stdout.readline().decode().rstrip("\r\n"):
+            while adbLine := proc.stdout.readline():
+                adbLine = adbLine.decode().rstrip("\r\n")
                 yield adbLine
 
     def _getFilesTree(self, tree_root: str, tree_root_stat: os.stat_result, followLinks: bool = False):

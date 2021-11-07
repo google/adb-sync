@@ -45,6 +45,7 @@ class LocalFileSystem(FileSystem):
             self.adb_arguments + ["pull", source, destination],
             stdout = subprocess.PIPE, stderr = subprocess.STDOUT
         ) as proc:
-            while adbLine := proc.stdout.readline().decode().rstrip("\r\n"):
+            while adbLine := proc.stdout.readline():
+                adbLine = adbLine.decode().rstrip("\r\n")
                 if not self.RE_ADB_FILE_PULLED.fullmatch(adbLine):
                     criticalLogExit("Line not captured: '{}'".format(adbLine))
