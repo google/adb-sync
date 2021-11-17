@@ -15,7 +15,6 @@ class AndroidFileSystem(FileSystem):
     RE_TESTCONNECTION_NO_DEVICE = re.compile("^adb\\: no devices/emulators found$")
     RE_TESTCONNECTION_DAEMON_NOT_RUNNING = re.compile("^\\* daemon not running; starting now at tcp:\\d+$")
     RE_TESTCONNECTION_DAEMON_STARTED = re.compile("^\\* daemon started successfully$")
-    RE_ADB_FILE_PUSHED = re.compile("^.*: 1 file pushed, 0 skipped\\..*$")
 
     RE_LS_TO_STAT = re.compile(
         r"""^
@@ -164,12 +163,13 @@ class AndroidFileSystem(FileSystem):
     def normPath(self, path: str) -> str:
         return os.path.normpath(path).replace("\\", "/")
 
-    def pushFileHere(self, source: str, destination: str) -> None:
-        with subprocess.Popen(
-            self.adb_arguments + ["push", source, destination],
-            stdout = subprocess.PIPE, stderr = subprocess.STDOUT
-        ) as proc:
-            while adbLine := proc.stdout.readline():
-                adbLine = adbLine.decode().rstrip("\r\n")
-                if not self.RE_ADB_FILE_PUSHED.fullmatch(adbLine):
-                    criticalLogExit("Line not captured: '{}'".format(adbLine))
+    def pushFileHere(self, source: str, destination: str, showProgress: bool = False) -> None:
+        if showProgress:
+            kwargs_call = {}
+        else:
+            kwargs_call = {
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL
+            }
+        if subprocess.call(self.adb_arguments + ["push", source, destination], **kwargs_call):
+            criticalLogExit("Non-zero exit code from adb push")

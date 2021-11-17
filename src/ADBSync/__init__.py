@@ -467,7 +467,8 @@ def main():
             fs_source.normPath,
             fs_destination.joinPaths,
             fs_destination.normPath,
-            dryRun = args.dryRun
+            dryRun = args.dryRun,
+            showProgress = args.showProgress
         )
     else:
         logging.info("Empty copy tree")

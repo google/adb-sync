@@ -10,8 +10,6 @@ from ..SAOLogging import criticalLogExit
 from .Base import FileSystem
 
 class LocalFileSystem(FileSystem):
-    RE_ADB_FILE_PULLED = re.compile("^.*: 1 file pulled, 0 skipped\\..*$")
-
     def unlink(self, path: str) -> None:
         os.unlink(path)
 
@@ -40,12 +38,13 @@ class LocalFileSystem(FileSystem):
     def normPath(self, path: str) -> str:
         return os.path.normpath(path)
 
-    def pushFileHere(self, source: str, destination: str) -> None:
-        with subprocess.Popen(
-            self.adb_arguments + ["pull", source, destination],
-            stdout = subprocess.PIPE, stderr = subprocess.STDOUT
-        ) as proc:
-            while adbLine := proc.stdout.readline():
-                adbLine = adbLine.decode().rstrip("\r\n")
-                if not self.RE_ADB_FILE_PULLED.fullmatch(adbLine):
-                    criticalLogExit("Line not captured: '{}'".format(adbLine))
+    def pushFileHere(self, source: str, destination: str, showProgress: bool = False) -> None:
+        if showProgress:
+            kwargs_call = {}
+        else:
+            kwargs_call = {
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL
+            }
+        if subprocess.call(self.adb_arguments + ["pull", source, destination], **kwargs_call):
+            criticalLogExit("Non-zero exit code from adb pull")

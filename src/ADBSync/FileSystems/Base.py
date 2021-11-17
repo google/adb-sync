@@ -80,12 +80,17 @@ class FileSystem():
         pathNormFunction_source,
         pathJoinFunction_destination,
         pathNormFunction_destination,
-        dryRun: bool = True
+        dryRun: bool = True,
+        showProgress: bool = False
         ) -> None:
         if isinstance(tree, tuple):
-            logging.info("Copying '{}' to '{}'".format(tree_root, destination_root))
-            if not dryRun:
-                self.pushFileHere(tree_root, destination_root)
+            if dryRun:
+                logging.info("Copying '{}' to '{}'".format(tree_root, destination_root))
+            else:
+                if not showProgress:
+                    # log this instead of letting adb display output
+                    logging.info("Copying '{}' to '{}'".format(tree_root, destination_root))
+                self.pushFileHere(tree_root, destination_root, showProgress = showProgress)
                 self.utime(destination_root, tree)
         elif isinstance(tree, dict):
             if tree.pop(".", False):
@@ -101,7 +106,8 @@ class FileSystem():
                     pathNormFunction_source,
                     pathJoinFunction_destination,
                     pathNormFunction_destination,
-                    dryRun = dryRun
+                    dryRun = dryRun,
+                    showProgress = showProgress
                 )
         else:
             raise NotImplementedError
@@ -135,5 +141,5 @@ class FileSystem():
     def normPath(self, path: str) -> str:
         raise NotImplementedError
 
-    def pushFileHere(self, source: str, destination: str) -> None:
+    def pushFileHere(self, source: str, destination: str, showProgress: bool = False) -> None:
         raise NotImplementedError

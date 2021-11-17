@@ -21,6 +21,7 @@ class Args():
     deleteExcluded: bool
     pull: bool
     force: bool
+    showProgress: bool
 
     adb_bin: str
     adb_flags: List[str]
@@ -89,6 +90,10 @@ def getArgs(docstring: str, version: str) -> Args:
         help = "Allows files to overwrite folders and folders to overwrite files. This is false by default to prevent large scale accidents",
         action = "store_true",
         dest = "force")
+    parser.add_argument("--show-progress",
+        help = "Show progress from 'adb push' and 'adb pull' commands",
+        action = "store_true",
+        dest = "showProgress")
 
     parser_adb = parser.add_argument_group(title = "ADB arguments",
         description = "By default ADB works for me without touching any of these, but if you have any specific "
@@ -129,6 +134,7 @@ def getArgs(docstring: str, version: str) -> Args:
         args.deleteExcluded,
         args.pull,
         args.force,
+        args.showProgress,
 
         args.adb_bin,
         args.adb_flags,
