@@ -8,7 +8,7 @@ DEPRECATED
 ==========
 
 This project is no longer being maintained; please use
-[better-adb-sync](https://github.com/SelfAdjointOperator/better-adb-sync)
+[better-adb-sync](https://github.com/jb2170/better-adb-sync)
 instead. Thanks!
 
 Related Projects
@@ -17,7 +17,7 @@ Related Projects
 Before getting used to this, please review this list of projects that are
 somehow related to adb-sync and may fulfill your needs better:
 
-* [better-adb-sync](https://github.com/SelfAdjointOperator/better-adb-sync) is
+* [better-adb-sync](https://github.com/jb2170/better-adb-sync) is
   an improved rewrite of this project.
 * [rsync](http://rsync.samba.org/) is a file synchronization tool for local
   (including FUSE) file systems or SSH connections. This can be used even with
