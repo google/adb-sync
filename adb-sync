@@ -684,9 +684,15 @@ def FixPath(src: bytes, dst: bytes) -> Tuple[bytes, bytes]:
   return (src, dst)
 
 
-def main() -> None:
-  logging.basicConfig(level=logging.INFO)
+def GetLogLevel(name: str) -> int:
+  """Returns the numeric value for the named logging level."""
+  level = getattr(logging, name.upper(), logging.INFO)
+  if not isinstance(level, int):
+    return logging.INFO
+  return level
 
+
+def main() -> None:
   parser = argparse.ArgumentParser(
       description='Synchronize a directory between an Android device and the '
       'local file system')
@@ -793,10 +799,19 @@ def main() -> None:
       action='store_true',
       help='transform symlink into referent file/dir')
   parser.add_argument(
+      '--log',
+      metavar='LEVEL',
+      default='INFO',
+      type=str,
+      help='Minimum log level to display - one of: '
+      'DEBUG INFO WARNING ERROR CRITICAL (default: INFO).')
+  parser.add_argument(
       '--dry-run',
       action='store_true',
       help='Do not do anything - just show what would be done.')
   args = parser.parse_args()
+
+  logging.basicConfig(level=GetLogLevel(args.log))
 
   localpatterns = [os.fsencode(x) for x in args.source]
   remotepath = os.fsencode(args.destination)
