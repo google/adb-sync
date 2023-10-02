@@ -24,6 +24,7 @@ import re
 import stat
 import subprocess
 import time
+import calendar
 from types import TracebackType
 from typing import Callable, cast, Dict, List, IO, Iterable, Optional, Tuple, Type
 
@@ -177,7 +178,7 @@ class AdbFileSystem(GlobLike, OSLike):
       st_mode |= stat.S_IFSOCK
     st_size = None if groups['st_size'] is None else int(groups['st_size'])
     st_mtime = int(
-        time.mktime(
+        calendar.timegm(
             time.strptime(
                 match.group('st_mtime').decode('ascii'), '%Y-%m-%d %H:%M')))
 
@@ -231,7 +232,7 @@ class AdbFileSystem(GlobLike, OSLike):
     """List the contents of a directory, caching them for later lstat calls."""
     with Stdout(self.adb +
                 [b'shell',
-                 b'ls -al %s' % (self.QuoteArgument(path + b'/'),)]) as stdout:
+                 b'TZ=utc ls -al %s' % (self.QuoteArgument(path + b'/'),)]) as stdout:
       for line in stdout:
         if line.startswith(b'total '):
           continue
@@ -252,7 +253,7 @@ class AdbFileSystem(GlobLike, OSLike):
       return self.stat_cache[path]
     with Stdout(
         self.adb +
-        [b'shell', b'ls -ald %s' % (self.QuoteArgument(path),)]) as stdout:
+        [b'shell', b'TZ=utc ls -ald %s' % (self.QuoteArgument(path),)]) as stdout:
       for line in stdout:
         if line.startswith(b'total '):
           continue
@@ -269,7 +270,7 @@ class AdbFileSystem(GlobLike, OSLike):
       return self.stat_cache[path]
     with Stdout(
         self.adb +
-        [b'shell', b'ls -aldL %s' % (self.QuoteArgument(path),)]) as stdout:
+        [b'shell', b'TZ=utc ls -aldL %s' % (self.QuoteArgument(path),)]) as stdout:
       for line in stdout:
         if line.startswith(b'total '):
           continue
@@ -303,19 +304,19 @@ class AdbFileSystem(GlobLike, OSLike):
     # TODO(rpolzer): Find out why this does not work (returns status 255).
     """Set the time of a file to a specified unix time."""
     atime, mtime = times
-    timestr = time.strftime('%Y%m%d.%H%M%S',
-                            time.localtime(mtime)).encode('ascii')
+    timestr = time.strftime('%Y%m%d%H%M.%S',
+                            time.gmtime(mtime)).encode('ascii')
     if subprocess.call(
         self.adb +
         [b'shell',
-         b'touch -mt %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
+         b'TZ=utc touch -mt %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
-    timestr = time.strftime('%Y%m%d.%H%M%S',
-                            time.localtime(atime)).encode('ascii')
+    timestr = time.strftime('%Y%m%d%H%M.%S',
+                            time.gmtime(atime)).encode('ascii')
     if subprocess.call(
         self.adb +
         [b'shell',
-         b'touch -at %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
+         b'TZ=utc touch -at %s %s' % (timestr, self.QuoteArgument(path))]) != 0:
       raise OSError('touch failed')
 
   def glob(self, path: bytes) -> Iterable[bytes]:  # glob's name, so pylint: disable=g-bad-name
@@ -373,9 +374,9 @@ def BuildFileList(fs: OSLike, path: bytes, follow_links: bool,
   elif stat.S_ISREG(statresult.st_mode):
     yield prefix, statresult
   elif stat.S_ISLNK(statresult.st_mode) and not follow_links:
-    yield prefix, statresult
+    pass # ignore links completely
   else:
-    logging.info('Unsupported file: %r.', path)
+    logging.info('Unsupported file: %r.', path.decode('utf-8'))
 
 
 def DiffLists(a: Iterable[Tuple[bytes, os.stat_result]],
@@ -460,7 +461,7 @@ class DeleteInterruptedFile(object):
                exc_tb: Optional[TracebackType]) -> bool:
     if exc_type is not None:
       logging.info('Interrupted-%s-Delete: %r',
-                   'Pull' if self.fs == os else 'Push', self.name)
+                   'Pull' if self.fs == os else 'Push', self.name.decode('utf-8'))
       if not self.dry_run:
         self.fs.unlink(self.name)
     return False
@@ -537,7 +538,7 @@ class FileSyncer(object):
         else:
           for name, s in reversed(self.dst_only[i]):
             dst_name = self.dst[i] + name
-            logging.info('%s-Delete: %r', self.push[i], dst_name)
+            logging.info('%s-Delete: %r', self.push[i], dst_name.decode('utf-8'))
             if stat.S_ISDIR(s.st_mode):
               if not self.dry_run:
                 self.dst_fs[i].rmdir(dst_name)
@@ -558,23 +559,22 @@ class FileSyncer(object):
       elif stat.S_ISDIR(localstat.st_mode) or stat.S_ISDIR(remotestat.st_mode):
         # Dir vs file? Nothing to do here yet.
         pass
-      else:
-        # File vs file? Compare sizes.
-        if localstat.st_size == remotestat.st_size:
+      # Truncate times to full minutes, as Android's "ls" only outputs minute
+      # accuracy.
+      localminute = int(localstat.st_mtime / 60)
+      remoteminute = int(remotestat.st_mtime / 60)
+      if localstat.st_size == remotestat.st_size:
+        if localminute == remoteminute:
           continue
       l2r = self.local_to_remote
       r2l = self.remote_to_local
       if l2r and r2l:
-        # Truncate times to full minutes, as Android's "ls" only outputs minute
-        # accuracy.
-        localminute = int(localstat.st_mtime / 60)
-        remoteminute = int(remotestat.st_mtime / 60)
         if localminute > remoteminute:
           r2l = False
         elif localminute < remoteminute:
           l2r = False
       if l2r and r2l:
-        logging.warning('Unresolvable: %r', name)
+        logging.warning('Unresolvable: %r', name.decode('utf-8'))
         continue
       if l2r:
         i = 0  # Local to remote operation.
@@ -585,7 +585,10 @@ class FileSyncer(object):
         src_stat = remotestat
         dst_stat = localstat
       dst_name = self.dst[i] + name
-      logging.info('%s-Delete-Conflicting: %r', self.push[i], dst_name)
+      if r2l and self.copy_links:
+        # use true destination if we allow copy links (only for local)
+        dst_name = os.path.realpath(dst_name)
+      logging.info('%s-Delete-Conflicting: %r', self.push[i], dst_name.decode('utf-8'))
       if stat.S_ISDIR(localstat.st_mode) or stat.S_ISDIR(remotestat.st_mode):
         if not self.allow_replace:
           logging.info('Would have to replace to do this. '
@@ -628,7 +631,10 @@ class FileSyncer(object):
         for name, s in self.src_only[i]:
           src_name = self.src[i] + name
           dst_name = self.dst[i] + name
-          logging.info('%s: %r', self.push[i], dst_name)
+          if i == 1 and self.copy_links:
+            # use true destination if we allow copy links (only for local)
+            dst_name = os.path.realpath(dst_name)
+          logging.info('%s: %r', self.push[i], dst_name.decode('utf-8'))
           if stat.S_ISDIR(s.st_mode):
             if not self.dry_run:
               self.dst_fs[i].makedirs(dst_name)
@@ -640,9 +646,9 @@ class FileSyncer(object):
                 self.num_bytes += s.st_size
           if not self.dry_run:
             if self.preserve_times:
-              logging.info('%s-Times: accessed %s, modified %s', self.push[i],
-                           time.asctime(time.localtime(s.st_atime)),
-                           time.asctime(time.localtime(s.st_mtime)))
+              logging.info('%s-Times: accessed %s UTC, modified %s UTC', self.push[i],
+                           time.asctime(time.gmtime(s.st_atime)),
+                           time.asctime(time.gmtime(s.st_mtime)))
               self.dst_fs[i].utime(dst_name, (s.st_atime, s.st_mtime))
 
   def TimeReport(self) -> None:
@@ -863,7 +869,7 @@ def main() -> None:
       return
 
   for i in range(len(localpaths)):
-    logging.info('Sync: local %r, remote %r', localpaths[i], remotepaths[i])
+    logging.info('Sync: local %r, remote %r', localpaths[i].decode('utf-8'), remotepaths[i].decode('utf-8'))
     syncer = FileSyncer(adb, localpaths[i], remotepaths[i], local_to_remote,
                         remote_to_local, preserve_times, delete_missing,
                         allow_overwrite, allow_replace, copy_links, dry_run)
