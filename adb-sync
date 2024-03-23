@@ -212,7 +212,7 @@ class AdbFileSystem(GlobLike, OSLike):
     # while echo does its own backslash escape handling additionally to the
     # shell's. Too bad printf "%s\n" is not available.
     test_strings = [
-        b'(', b'(;  #`ls`$PATH\'"(\\\\\\\\){};!\xc0\xaf\xff\xc2\xbf'
+        b'(', b'(;  #`ls`$PATH\'"(\\\\\\\\){};!'
     ]
     for test_string in test_strings:
       good = False
